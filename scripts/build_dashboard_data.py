@@ -300,91 +300,45 @@ def compute_area_summary(config, homes):
     return summary
 
 
-def build_market_trends(config, market_data):
-    """Build market_trends object from parsed data."""
+def build_zip_city_map(homes):
+    """Build a zip code -> city name mapping from sold homes data."""
+    from collections import Counter
+    zip_counts = {}
+    for home in homes:
+        z = home.get("zip_code") or ""
+        c = home.get("city") or ""
+        if z and c:
+            zip_counts.setdefault(z, Counter())[c] += 1
+    # Pick the most common city for each zip
+    return {z: counts.most_common(1)[0][0] for z, counts in zip_counts.items()}
+
+
+def build_market_trends(config, market_data, homes):
+    """Build market_trends object and zip_areas list from parsed data."""
     trends = {}
 
-    # Add focus area cities and neighborhoods
-    for area_config in config.get("focus_areas", []):
-        area_name = area_config["name"]
-        if area_config.get("type") == "city":
-            # For city-type areas, add them if they exist in market data
-            # They might be in market_data with state suffix
-            for key in market_data:
-                if key.startswith("Zip Code:"):
-                    continue
-                # Check if this matches the area
-                if key.lower().startswith(area_name.lower()):
-                    trends[area_name] = market_data[key]
-                    break
+    # Include ALL zip-level market data
+    for key, records in market_data.items():
+        if key.startswith("Zip Code:"):
+            trends[key] = records
 
-    # Add zip codes from focus areas
-    for area_config in config.get("focus_areas", []):
-        area_name = area_config["name"]
-        zip_codes = area_config.get("zip_codes", [])
-
-        # For city-type with single zip, just add the raw zip entry
-        if area_config.get("type") == "city" and len(zip_codes) <= 1:
-            for zip_code in zip_codes:
-                zip_key = f"Zip Code: {zip_code}"
-                if zip_key in market_data:
-                    trends[zip_key] = market_data[zip_key]
-            continue
-
-        # For multi-zip areas (or neighborhood type), merge zip series into
-        # one entry keyed by area name, averaging values per date
-        zip_series = []
-        for zip_code in zip_codes:
-            zip_key = f"Zip Code: {zip_code}"
-            if zip_key in market_data:
-                zip_series.append(market_data[zip_key])
-
-        if not zip_series:
-            continue
-
-        if len(zip_series) == 1:
-            # Only one zip has data, use it directly
-            trends[area_name] = zip_series[0]
-        else:
-            # Merge: group records by date, average numeric fields
-            by_date = {}
-            numeric_fields = [
-                "median_sale_price", "median_list_price", "median_ppsf",
-                "homes_sold", "inventory", "months_of_supply", "median_dom",
-                "avg_sale_to_list", "sold_above_list", "price_drops",
-            ]
-            for series in zip_series:
-                for rec in series:
-                    d = rec["date"]
-                    if d not in by_date:
-                        by_date[d] = {f: [] for f in numeric_fields}
-                    for f in numeric_fields:
-                        if rec.get(f) is not None:
-                            by_date[d][f].append(rec[f])
-
-            merged = []
-            for d in sorted(by_date):
-                rec = {"date": d}
-                for f in numeric_fields:
-                    vals = by_date[d][f]
-                    rec[f] = sum(vals) / len(vals) if vals else None
-                merged.append(rec)
-            trends[area_name] = merged
-
-        # Also keep individual zip entries for city-type multi-zip areas
-        if area_config.get("type") == "city":
-            for zip_code in zip_codes:
-                zip_key = f"Zip Code: {zip_code}"
-                if zip_key in market_data:
-                    trends[zip_key] = market_data[zip_key]
-
-    # Always include baseline "Greensboro"
+    # Always include baseline "Greensboro" (city-level)
     for key in market_data:
         if key.lower() == "greensboro":
             trends["Greensboro"] = market_data[key]
             break
 
-    return trends
+    # Build zip_areas list for the multi-select dropdown
+    zip_city_map = build_zip_city_map(homes)
+    zip_areas = []
+    for key in sorted(trends.keys()):
+        if not key.startswith("Zip Code:"):
+            continue
+        zip_code = key.replace("Zip Code: ", "").strip()
+        city = zip_city_map.get(zip_code, "")
+        zip_areas.append({"zip": zip_code, "city": city, "key": key})
+
+    return trends, zip_areas
 
 
 def main():
@@ -435,8 +389,8 @@ def main():
 
     # Build market trends
     print("\nBuilding market trends...")
-    market_trends = build_market_trends(config, market_data)
-    print(f"  Included {len(market_trends)} market areas")
+    market_trends, zip_areas = build_market_trends(config, market_data, homes)
+    print(f"  Included {len(market_trends)} market areas, {len(zip_areas)} zip areas")
 
     # Assemble output
     print("\nAssembling output...")
@@ -445,6 +399,7 @@ def main():
         "config": config,
         "sold_window_days": sold_window_days,
         "market_trends": market_trends,
+        "zip_areas": zip_areas,
         "sold_homes": homes,
         "area_summary": area_summary,
     }

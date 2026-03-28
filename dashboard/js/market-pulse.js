@@ -13,9 +13,8 @@ const MarketPulse = {
   ],
 
   init(container, data) {
-    const config = data.config;
     const trends = data.market_trends;
-    const focusAreas = config.focus_areas;
+    const zipAreas = data.zip_areas || [];
     const trendOptions = Utils.TREND_TYPES.map(t =>
       `<option value="${t}">${Utils.TREND_LABELS[t]}</option>`
     ).join('');
@@ -43,13 +42,35 @@ const MarketPulse = {
             <li><strong>City-level trends:</strong> Redfin city market tracker (updated weekly)</li>
             <li><strong>Zip-level trends:</strong> Redfin zip code market tracker (updated monthly)</li>
           </ul>
-          <p>For neighborhood-type areas (e.g. Irving Park, Sunset Hills), trends are approximated by averaging the zip codes that overlap the neighborhood, since Redfin does not publish neighborhood-level market data.</p>
         </div>
       </div>
       <div class="controls">
-        <label>Areas: </label>
-        <div id="area-toggles" class="toggle-group"></div>
-        <button id="mp-deselect-all" class="btn-deselect-all">Deselect All</button>
+        <label>Areas:</label>
+        <div id="mp-area-select" class="multiselect">
+          <button type="button" class="multiselect-trigger" id="mp-area-trigger">
+            <span class="multiselect-label">Select areas...</span>
+            <span class="multiselect-arrow">&#9662;</span>
+          </button>
+          <div class="multiselect-dropdown" id="mp-area-dropdown">
+            <div class="multiselect-search-wrap">
+              <input type="text" class="multiselect-search" id="mp-area-search" placeholder="Filter..." autocomplete="off" />
+            </div>
+            <div class="multiselect-actions">
+              <button type="button" id="mp-select-all">Select All</button>
+            </div>
+            <div class="multiselect-options" id="mp-area-options"></div>
+          </div>
+        </div>
+        <div class="zipmap-wrap" id="mp-zipmap-wrap">
+          <button type="button" class="zipmap-btn" id="mp-zipmap-btn" title="Select areas on map">&#9881; Map</button>
+          <div class="zipmap-popover" id="mp-zipmap-popover">
+            <div class="zipmap-header">
+              <span>Click zip codes to toggle</span>
+              <button type="button" class="zipmap-close" id="mp-zipmap-close">&times;</button>
+            </div>
+            <div id="mp-zipmap" class="zipmap-container"></div>
+          </div>
+        </div>
         <div class="trend-control">
           <label for="mp-global-trend">Trend:</label>
           <select id="mp-global-trend">${trendOptions}</select>
@@ -79,43 +100,20 @@ const MarketPulse = {
     document.getElementById('mp-modal-close').addEventListener('click', () => modal.style.display = 'none');
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
 
-    // Build area toggle buttons
-    const toggleContainer = document.getElementById('area-toggles');
-    const allAreas = this._buildAreaList(focusAreas, trends);
+    // Build the area options list
+    const allAreas = this._buildAreaList(zipAreas, trends);
 
-    // Restore saved active areas, or default to all
+    // Restore saved active areas, or default to Greensboro metro
     const savedAreas = Prefs.get('mp.activeAreas');
     this._activeAreas = savedAreas
       ? new Set(savedAreas.filter(k => allAreas.some(a => a.key === k)))
-      : new Set(allAreas.map(a => a.key));
+      : new Set(trends['Greensboro'] ? ['Greensboro'] : []);
 
-    allAreas.forEach((area) => {
-      const btn = document.createElement('button');
-      btn.className = 'toggle-btn' + (this._activeAreas.has(area.key) ? ' active' : '');
-      btn.style.borderColor = area.color;
-      btn.textContent = area.label;
-      btn.dataset.key = area.key;
-      btn.addEventListener('click', () => {
-        if (this._activeAreas.has(area.key)) {
-          this._activeAreas.delete(area.key);
-          btn.classList.remove('active');
-        } else {
-          this._activeAreas.add(area.key);
-          btn.classList.add('active');
-        }
-        Prefs.set('mp.activeAreas', [...this._activeAreas]);
-        this._renderCharts(trends, allAreas);
-      });
-      toggleContainer.appendChild(btn);
-    });
+    // Populate multi-select
+    this._initMultiSelect(allAreas, trends);
 
-    // Deselect All button
-    document.getElementById('mp-deselect-all').addEventListener('click', () => {
-      this._activeAreas.clear();
-      toggleContainer.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
-      Prefs.set('mp.activeAreas', []);
-      this._renderCharts(trends, allAreas);
-    });
+    // Zip map popover
+    this._initZipMap(allAreas, trends);
 
     // Global trend select
     const globalSelect = document.getElementById('mp-global-trend');
@@ -149,57 +147,250 @@ const MarketPulse = {
     this._renderBuyerScore(trends, allAreas);
   },
 
-  _buildAreaList(focusAreas, trends) {
+  _buildAreaList(zipAreas, trends) {
     const areas = [];
+    let colorIdx = 0;
 
+    // Greensboro metro baseline
     if (trends['Greensboro']) {
       areas.push({
         key: 'Greensboro',
         label: 'Greensboro (Metro)',
         color: Utils.baselineColor,
-        dash: 'dash',
+        dash: 'solid',
       });
     }
 
-    focusAreas.forEach((fa, i) => {
-      if (fa.type === 'city' && trends[fa.name]) {
-        areas.push({
-          key: fa.name,
-          label: fa.name,
-          color: Utils.colorFor(i),
-          dash: 'solid',
-        });
-      }
-
-      // Neighborhood areas: use merged entry keyed by area name
-      if (fa.type === 'neighborhood' && trends[fa.name]) {
-        areas.push({
-          key: fa.name,
-          label: fa.name,
-          color: Utils.colorFor(i),
-          dash: 'solid',
-        });
-        return;
-      }
-
-      // City-type multi-zip: show individual zip traces
-      const zips = fa.zip_codes || [];
-      if (fa.type === 'city' && zips.length <= 1) return;
-      zips.forEach(zip => {
-        const zipKey = `Zip Code: ${zip}`;
-        if (trends[zipKey]) {
-          areas.push({
-            key: zipKey,
-            label: `${fa.name} (${zip})`,
-            color: Utils.colorFor(i),
-            dash: 'dot',
-          });
-        }
+    // All zip areas from the data
+    zipAreas.forEach(za => {
+      if (!trends[za.key]) return;
+      const label = za.city ? `${za.city} (${za.zip})` : za.zip;
+      areas.push({
+        key: za.key,
+        label,
+        color: Utils.colorFor(colorIdx),
+        dash: 'solid',
       });
+      colorIdx++;
     });
 
     return areas;
   },
+
+  _initMultiSelect(allAreas, trends) {
+    const trigger = document.getElementById('mp-area-trigger');
+    const dropdown = document.getElementById('mp-area-dropdown');
+    const optionsContainer = document.getElementById('mp-area-options');
+    const searchInput = document.getElementById('mp-area-search');
+
+    // Build option elements
+    allAreas.forEach(area => {
+      const opt = document.createElement('label');
+      opt.className = 'multiselect-option';
+      opt.dataset.key = area.key;
+      opt.dataset.search = area.label.toLowerCase();
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = this._activeAreas.has(area.key);
+
+      const swatch = document.createElement('span');
+      swatch.className = 'multiselect-swatch';
+      swatch.style.background = area.color;
+
+      const text = document.createElement('span');
+      text.textContent = area.label;
+
+      opt.appendChild(cb);
+      opt.appendChild(swatch);
+      opt.appendChild(text);
+      optionsContainer.appendChild(opt);
+
+      cb.addEventListener('change', () => {
+        if (cb.checked) {
+          this._activeAreas.add(area.key);
+        } else {
+          if (this._activeAreas.size <= 1) { cb.checked = true; return; }
+          this._activeAreas.delete(area.key);
+        }
+        Prefs.set('mp.activeAreas', [...this._activeAreas]);
+        this._updateTriggerLabel(allAreas);
+        this._syncMapStyles();
+        this._renderCharts(trends, allAreas);
+        this._renderBuyerScore(trends, allAreas);
+      });
+    });
+
+    this._updateTriggerLabel(allAreas);
+
+    // Toggle dropdown
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = dropdown.classList.toggle('open');
+      if (isOpen) {
+        searchInput.value = '';
+        this._filterOptions('');
+        searchInput.focus();
+      }
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#mp-area-select')) {
+        dropdown.classList.remove('open');
+      }
+    });
+
+    // Search filter
+    searchInput.addEventListener('input', () => {
+      this._filterOptions(searchInput.value.toLowerCase());
+    });
+
+    // Select All / Deselect All
+    document.getElementById('mp-select-all').addEventListener('click', () => {
+      allAreas.forEach(a => this._activeAreas.add(a.key));
+      optionsContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+      Prefs.set('mp.activeAreas', [...this._activeAreas]);
+      this._updateTriggerLabel(allAreas);
+      this._syncMapStyles();
+      this._renderCharts(trends, allAreas);
+      this._renderBuyerScore(trends, allAreas);
+    });
+
+  },
+
+  _filterOptions(query) {
+    document.querySelectorAll('#mp-area-options .multiselect-option').forEach(opt => {
+      opt.style.display = opt.dataset.search.includes(query) ? '' : 'none';
+    });
+  },
+
+  _updateTriggerLabel(allAreas) {
+    const label = document.querySelector('#mp-area-trigger .multiselect-label');
+    const count = this._activeAreas.size;
+    if (count === 0) {
+      label.textContent = 'Select areas...';
+    } else if (count === 1) {
+      const area = allAreas.find(a => this._activeAreas.has(a.key));
+      label.textContent = area ? area.label : '1 selected';
+    } else if (count === allAreas.length) {
+      label.textContent = 'All areas selected';
+    } else {
+      label.textContent = `${count} areas selected`;
+    }
+  },
+
+  _initZipMap(allAreas, trends) {
+    const btn = document.getElementById('mp-zipmap-btn');
+    const popover = document.getElementById('mp-zipmap-popover');
+    const closeBtn = document.getElementById('mp-zipmap-close');
+    let map = null;
+    let geoLayer = null;
+
+    // Build key->area lookup
+    const areaByKey = {};
+    allAreas.forEach(a => { areaByKey[a.key] = a; });
+
+    const styleFor = (zipKey) => {
+      const active = this._activeAreas.has(zipKey);
+      const area = areaByKey[zipKey];
+      return {
+        color: area ? area.color : '#6b7280',
+        weight: active ? 2 : 1,
+        fillColor: area ? area.color : '#9ca3af',
+        fillOpacity: active ? 0.45 : 0.08,
+      };
+    };
+
+    const syncMapStyles = () => {
+      if (!geoLayer) return;
+      geoLayer.eachLayer(layer => {
+        const zipKey = layer.feature.properties._zipKey;
+        if (zipKey) layer.setStyle(styleFor(zipKey));
+      });
+    };
+
+    // Store syncMapStyles so the multi-select can call it
+    this._syncMapStyles = syncMapStyles;
+
+    const openMap = () => {
+      popover.classList.add('open');
+      if (map) {
+        setTimeout(() => map.invalidateSize(), 50);
+        syncMapStyles();
+        return;
+      }
+
+      // Create the map
+      map = L.map('mp-zipmap', {
+        zoomControl: true,
+        attributionControl: false,
+      });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 13,
+      }).addTo(map);
+
+      // Load GeoJSON
+      fetch('/data/zcta_boundaries.geojson')
+        .then(r => r.json())
+        .then(geojson => {
+          geoLayer = L.geoJSON(geojson, {
+            style: (feature) => {
+              const zip = feature.properties.ZCTA5;
+              const zipKey = `Zip Code: ${zip}`;
+              feature.properties._zipKey = zipKey;
+              return styleFor(zipKey);
+            },
+            onEachFeature: (feature, layer) => {
+              const zip = feature.properties.ZCTA5;
+              const zipKey = `Zip Code: ${zip}`;
+              const area = areaByKey[zipKey];
+              const label = area ? area.label : zip;
+
+              layer.bindTooltip(label, { sticky: true, className: 'zipmap-tooltip' });
+
+              layer.on('click', () => {
+                if (this._activeAreas.has(zipKey)) {
+                  if (this._activeAreas.size <= 1) return;
+                  this._activeAreas.delete(zipKey);
+                } else {
+                  this._activeAreas.add(zipKey);
+                }
+                Prefs.set('mp.activeAreas', [...this._activeAreas]);
+                // Sync checkbox
+                const cb = document.querySelector(`#mp-area-options .multiselect-option[data-key="${CSS.escape(zipKey)}"] input`);
+                if (cb) cb.checked = this._activeAreas.has(zipKey);
+                this._updateTriggerLabel(allAreas);
+                syncMapStyles();
+                this._renderCharts(trends, allAreas);
+                this._renderBuyerScore(trends, allAreas);
+              });
+            },
+          }).addTo(map);
+
+          map.fitBounds(geoLayer.getBounds(), { padding: [10, 10] });
+        });
+    };
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (popover.classList.contains('open')) {
+        popover.classList.remove('open');
+      } else {
+        openMap();
+      }
+    });
+
+    closeBtn.addEventListener('click', () => popover.classList.remove('open'));
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#mp-zipmap-wrap')) {
+        popover.classList.remove('open');
+      }
+    });
+  },
+
+  _syncMapStyles() { /* set by _initZipMap */ },
 
   _renderCharts(trends, allAreas) {
     const globalTrend = Prefs.get('mp.globalTrend', 'off');
@@ -226,7 +417,7 @@ const MarketPulse = {
           name: area.label,
           type: 'scatter',
           mode: 'lines',
-          line: { color: area.color, dash: area.dash, width: area.dash === 'dash' ? 2 : 1.5 },
+          line: { color: area.color, dash: area.dash, width: 1.5 },
           connectgaps: true,
           opacity: chartTrend !== 'off' ? 0.2 : 1,
         });
@@ -320,7 +511,7 @@ const MarketPulse = {
   },
 
   _fmtHist(val, type) {
-    if (val == null) return '—';
+    if (val == null) return '\u2014';
     if (type === 'ratio') return val.toFixed(3);
     if (type === 'pct') return (val * 100).toFixed(0) + '%';
     if (type === 'int') return Math.round(val).toString();
@@ -356,30 +547,30 @@ const MarketPulse = {
           <div class="score-item score-item-composite">
             <span>Buyer Favorability</span>
             <span class="${s.colorClass}">${s.composite}</span>
-            ${hasHist ? `<span class="hist-vals">${periods.map(m => { const hs = this._computeScoreAt(records, m); return `<span class="hist-val ${hs ? hs.colorClass : ''}">${hs ? hs.composite : '—'}</span>`; }).join('')}</span>` : ''}
+            ${hasHist ? `<span class="hist-vals">${periods.map(m => { const hs = this._computeScoreAt(records, m); return `<span class="hist-val ${hs ? hs.colorClass : ''}">${hs ? hs.composite : '\u2014'}</span>`; }).join('')}</span>` : ''}
             <span></span>
           </div>
           <div class="score-item">
             <span>Months of Supply <span class="info-icon" data-tooltip="How many months it would take to sell all current listings at the current sales pace. Above 6 months favors buyers (more choices, less competition). Below 4 months favors sellers. Score: 0 at 2 months, 100 at 6+ months.">i</span></span>
-            <span>${s.avgSupply != null ? s.avgSupply.toFixed(1) : '—'}</span>
+            <span>${s.avgSupply != null ? s.avgSupply.toFixed(1) : '\u2014'}</span>
             ${hasHist ? `<span class="hist-vals">${this._histVals(records, 'supply', 'dec', periods)}</span>` : ''}
             <div class="score-bar"><div class="score-fill" style="width:${s.supplyScore}%;background:${s.supplyScore>50?'#16a34a':'#dc2626'}"></div></div>
           </div>
           <div class="score-item">
             <span>Sale-to-List Ratio <span class="info-icon" data-tooltip="Average ratio of final sale price to original list price. Below 1.0 means homes sell under asking — buyers have negotiating power. Above 1.0 means bidding wars. Score: 100 at 0.97, 0 at 1.03+.">i</span></span>
-            <span>${s.avgRatio != null ? s.avgRatio.toFixed(3) : '—'}</span>
+            <span>${s.avgRatio != null ? s.avgRatio.toFixed(3) : '\u2014'}</span>
             ${hasHist ? `<span class="hist-vals">${this._histVals(records, 'ratio', 'ratio', periods)}</span>` : ''}
             <div class="score-bar"><div class="score-fill" style="width:${s.ratioScore}%;background:${s.ratioScore>50?'#16a34a':'#dc2626'}"></div></div>
           </div>
           <div class="score-item">
             <span>Days on Market <span class="info-icon" data-tooltip="Median number of days homes sit on the market before selling. Higher means less urgency and more time to decide — good for buyers. Lower means homes sell fast — competitive for buyers. Score: 0 at 14 days, 100 at 45+ days.">i</span></span>
-            <span>${s.avgDOM != null ? Math.round(s.avgDOM) : '—'}</span>
+            <span>${s.avgDOM != null ? Math.round(s.avgDOM) : '\u2014'}</span>
             ${hasHist ? `<span class="hist-vals">${this._histVals(records, 'dom', 'int', periods)}</span>` : ''}
             <div class="score-bar"><div class="score-fill" style="width:${s.domScore}%;background:${s.domScore>50?'#16a34a':'#dc2626'}"></div></div>
           </div>
           <div class="score-item">
             <span>Price Drop Rate <span class="info-icon" data-tooltip="Fraction of listings that had at least one price reduction. Higher means sellers are having to cut prices to attract buyers — a sign of buyer leverage. Score: 0 at 10%, 100 at 30%+.">i</span></span>
-            <span>${s.avgPriceDrops != null ? (s.avgPriceDrops * 100).toFixed(0) + '%' : '—'}</span>
+            <span>${s.avgPriceDrops != null ? (s.avgPriceDrops * 100).toFixed(0) + '%' : '\u2014'}</span>
             ${hasHist ? `<span class="hist-vals">${this._histVals(records, 'drops', 'pct', periods)}</span>` : ''}
             <div class="score-bar"><div class="score-fill" style="width:${s.dropScore}%;background:${s.dropScore>50?'#16a34a':'#dc2626'}"></div></div>
           </div>
@@ -405,7 +596,7 @@ const MarketPulse = {
     // Per-area scores (compact — no breakdown)
     const periods = [3, 6, 12, 24];
     const areaScores = allAreas
-      .filter(a => a.key !== 'Greensboro' && trends[a.key] && trends[a.key].length > 0)
+      .filter(a => a.key !== 'Greensboro' && this._activeAreas.has(a.key) && trends[a.key] && trends[a.key].length > 0)
       .map(a => ({ area: a, score: this._computeScore(trends[a.key]), records: trends[a.key] }))
       .filter(s => s.score);
 
@@ -428,11 +619,11 @@ const MarketPulse = {
                 </div>
                 <div class="area-score-tooltip">
                   <div class="ast-row ast-header"><span></span><span>Now</span>${histCols}<span></span></div>
-                  <div class="ast-row ast-composite"><span>Buyer Favorability</span><span class="${s.colorClass}">${s.composite}</span><span class="ast-hist-vals">${hists.map(h => { const hs = this._computeScoreAt(r, h.m); return `<span class="ast-hist-val ${hs ? hs.colorClass : ''}">${hs ? hs.composite : '—'}</span>`; }).join('')}</span><span></span></div>
-                  <div class="ast-row"><span>Months of Supply</span><span>${s.avgSupply != null ? s.avgSupply.toFixed(1) : '—'}</span>${histRow(d => this._fmtHist(d?.supply, 'dec'))}<div class="score-bar"><div class="score-fill" style="width:${s.supplyScore}%;background:${s.supplyScore>50?'#16a34a':'#dc2626'}"></div></div></div>
-                  <div class="ast-row"><span>Sale-to-List</span><span>${s.avgRatio != null ? s.avgRatio.toFixed(3) : '—'}</span>${histRow(d => this._fmtHist(d?.ratio, 'ratio'))}<div class="score-bar"><div class="score-fill" style="width:${s.ratioScore}%;background:${s.ratioScore>50?'#16a34a':'#dc2626'}"></div></div></div>
-                  <div class="ast-row"><span>Days on Market</span><span>${s.avgDOM != null ? Math.round(s.avgDOM) : '—'}</span>${histRow(d => this._fmtHist(d?.dom, 'int'))}<div class="score-bar"><div class="score-fill" style="width:${s.domScore}%;background:${s.domScore>50?'#16a34a':'#dc2626'}"></div></div></div>
-                  <div class="ast-row"><span>Price Drop Rate</span><span>${s.avgPriceDrops != null ? (s.avgPriceDrops * 100).toFixed(0) + '%' : '—'}</span>${histRow(d => this._fmtHist(d?.drops, 'pct'))}<div class="score-bar"><div class="score-fill" style="width:${s.dropScore}%;background:${s.dropScore>50?'#16a34a':'#dc2626'}"></div></div></div>
+                  <div class="ast-row ast-composite"><span>Buyer Favorability</span><span class="${s.colorClass}">${s.composite}</span><span class="ast-hist-vals">${hists.map(h => { const hs = this._computeScoreAt(r, h.m); return `<span class="ast-hist-val ${hs ? hs.colorClass : ''}">${hs ? hs.composite : '\u2014'}</span>`; }).join('')}</span><span></span></div>
+                  <div class="ast-row"><span>Months of Supply</span><span>${s.avgSupply != null ? s.avgSupply.toFixed(1) : '\u2014'}</span>${histRow(d => this._fmtHist(d?.supply, 'dec'))}<div class="score-bar"><div class="score-fill" style="width:${s.supplyScore}%;background:${s.supplyScore>50?'#16a34a':'#dc2626'}"></div></div></div>
+                  <div class="ast-row"><span>Sale-to-List</span><span>${s.avgRatio != null ? s.avgRatio.toFixed(3) : '\u2014'}</span>${histRow(d => this._fmtHist(d?.ratio, 'ratio'))}<div class="score-bar"><div class="score-fill" style="width:${s.ratioScore}%;background:${s.ratioScore>50?'#16a34a':'#dc2626'}"></div></div></div>
+                  <div class="ast-row"><span>Days on Market</span><span>${s.avgDOM != null ? Math.round(s.avgDOM) : '\u2014'}</span>${histRow(d => this._fmtHist(d?.dom, 'int'))}<div class="score-bar"><div class="score-fill" style="width:${s.domScore}%;background:${s.domScore>50?'#16a34a':'#dc2626'}"></div></div></div>
+                  <div class="ast-row"><span>Price Drop Rate</span><span>${s.avgPriceDrops != null ? (s.avgPriceDrops * 100).toFixed(0) + '%' : '\u2014'}</span>${histRow(d => this._fmtHist(d?.drops, 'pct'))}<div class="score-bar"><div class="score-fill" style="width:${s.dropScore}%;background:${s.dropScore>50?'#16a34a':'#dc2626'}"></div></div></div>
                 </div>
               </div>
             `}).join('')}

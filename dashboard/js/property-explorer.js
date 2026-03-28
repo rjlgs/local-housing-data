@@ -47,56 +47,85 @@ const PropertyExplorer = {
         </div>
       </div>
       <div class="filter-bar">
-        <div class="filter-group">
-          <label>Area</label>
-          <select id="filter-area">
-            <option value="all">All Areas</option>
-            ${focusAreas.map(fa => `<option value="${fa.name}">${fa.name}</option>`).join('')}
-            <option value="custom">Custom (Draw on Map)</option>
-          </select>
+        <div class="filter-cluster">
+          <div class="filter-cluster-label">Area</div>
+          <div class="filter-cluster-row">
+            <div class="filter-group">
+              <label>&nbsp;</label>
+              <select id="filter-area">
+                <option value="all">All Areas</option>
+                ${focusAreas.map(fa => `<option value="${fa.name}">${fa.name}</option>`).join('')}
+                <option value="custom">Custom (Draw on Map)</option>
+              </select>
+            </div>
+          </div>
         </div>
-        <div class="filter-group">
-          <label>Beds</label>
-          <select id="filter-beds">
-            <option value="">Any</option>
-            <option value="2">2+</option>
-            <option value="3">3+</option>
-            <option value="4">4+</option>
-            <option value="5">5+</option>
-          </select>
+        <div class="filter-cluster">
+          <div class="filter-cluster-label">Beds</div>
+          <div class="filter-cluster-row">
+            <div class="filter-group"><label>Min</label><input type="number" id="filter-beds-min" placeholder="2" min="0" step="1"></div>
+            <div class="filter-group"><label>Max</label><input type="number" id="filter-beds-max" placeholder="5" min="0" step="1"></div>
+          </div>
         </div>
-        <div class="filter-group">
-          <label>Baths</label>
-          <select id="filter-baths">
-            <option value="">Any</option>
-            <option value="1.5">1.5+</option>
-            <option value="2">2+</option>
-            <option value="3">3+</option>
-          </select>
+        <div class="filter-cluster">
+          <div class="filter-cluster-label">Baths</div>
+          <div class="filter-cluster-row">
+            <div class="filter-group"><label>Min</label><input type="number" id="filter-baths-min" placeholder="2" min="0" step="0.5"></div>
+            <div class="filter-group"><label>Max</label><input type="number" id="filter-baths-max" placeholder="4" min="0" step="0.5"></div>
+          </div>
         </div>
-        <div class="filter-group">
-          <label>Min Sq Ft</label>
-          <input type="number" id="filter-sqft-min" placeholder="e.g. 1500" step="100">
+        <div class="filter-cluster">
+          <div class="filter-cluster-label">Sq Ft</div>
+          <div class="filter-cluster-row">
+            <div class="filter-group"><label>Min</label><input type="number" id="filter-sqft-min" placeholder="1500" step="100"></div>
+            <div class="filter-group"><label>Max</label><input type="number" id="filter-sqft-max" placeholder="3000" step="100"></div>
+          </div>
         </div>
-        <div class="filter-group">
-          <label>Max Sq Ft</label>
-          <input type="number" id="filter-sqft-max" placeholder="e.g. 3000" step="100">
+        <div class="filter-cluster">
+          <div class="filter-cluster-label">Price</div>
+          <div class="filter-cluster-row">
+            <div class="filter-group"><label>Min</label><input type="number" id="filter-price-min" placeholder="200k" step="10000"></div>
+            <div class="filter-group"><label>Max</label><input type="number" id="filter-price-max" placeholder="500k" step="10000"></div>
+          </div>
         </div>
-        <div class="filter-group">
-          <label>Max Price</label>
-          <input type="number" id="filter-price-max" placeholder="e.g. 500000" step="10000">
+        <div class="filter-cluster">
+          <div class="filter-cluster-label">Year Built</div>
+          <div class="filter-cluster-row">
+            <div class="filter-group"><label>Min</label><input type="number" id="filter-year-min" placeholder="1990" step="1"></div>
+            <div class="filter-group"><label>Max</label><input type="number" id="filter-year-max" placeholder="2020" step="1"></div>
+          </div>
         </div>
-        <div class="filter-group">
-          <label>Property Type</label>
-          <select id="filter-type">
-            <option value="">Any</option>
-            <option value="Single Family Residential">Single Family</option>
-            <option value="Townhouse">Townhouse</option>
-            <option value="Condo/Co-op">Condo</option>
-          </select>
+        <div class="filter-cluster">
+          <div class="filter-cluster-label">HOA</div>
+          <div class="filter-cluster-row">
+            <div class="filter-group">
+              <label>&nbsp;</label>
+              <select id="filter-hoa">
+                <option value="">Any</option>
+                <option value="none">No HOA</option>
+                <option value="has">Has HOA</option>
+              </select>
+            </div>
+          </div>
         </div>
-        <button id="filter-apply" class="btn-primary">Apply Filters</button>
-        <button id="filter-clear" class="btn-secondary">Clear</button>
+        <div class="filter-cluster">
+          <div class="filter-cluster-label">Type</div>
+          <div class="filter-cluster-row">
+            <div class="filter-group">
+              <label>&nbsp;</label>
+              <select id="filter-type">
+                <option value="">Any</option>
+                <option value="Single Family Residential">Single Family</option>
+                <option value="Townhouse">Townhouse</option>
+                <option value="Condo/Co-op">Condo</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="filter-cluster filter-actions">
+          <button id="filter-apply" class="btn-primary">Apply</button>
+          <button id="filter-clear" class="btn-secondary">Clear</button>
+        </div>
       </div>
       <div id="explorer-map" class="explorer-map"></div>
       <div id="results-summary" class="results-summary"></div>
@@ -113,11 +142,17 @@ const PropertyExplorer = {
     // Restore saved filters
     const saved = Prefs.get('pe', {});
     if (saved.area) document.getElementById('filter-area').value = saved.area;
-    if (saved.beds) document.getElementById('filter-beds').value = saved.beds;
-    if (saved.baths) document.getElementById('filter-baths').value = saved.baths;
+    if (saved.bedsMin) document.getElementById('filter-beds-min').value = saved.bedsMin;
+    if (saved.bedsMax) document.getElementById('filter-beds-max').value = saved.bedsMax;
+    if (saved.bathsMin) document.getElementById('filter-baths-min').value = saved.bathsMin;
+    if (saved.bathsMax) document.getElementById('filter-baths-max').value = saved.bathsMax;
     if (saved.sqftMin) document.getElementById('filter-sqft-min').value = saved.sqftMin;
     if (saved.sqftMax) document.getElementById('filter-sqft-max').value = saved.sqftMax;
+    if (saved.priceMin) document.getElementById('filter-price-min').value = saved.priceMin;
     if (saved.priceMax) document.getElementById('filter-price-max').value = saved.priceMax;
+    if (saved.hoa) document.getElementById('filter-hoa').value = saved.hoa;
+    if (saved.yearMin) document.getElementById('filter-year-min').value = saved.yearMin;
+    if (saved.yearMax) document.getElementById('filter-year-max').value = saved.yearMax;
     if (saved.type) document.getElementById('filter-type').value = saved.type;
 
     // Bind events
@@ -297,22 +332,34 @@ const PropertyExplorer = {
   _getFilters() {
     return {
       area: document.getElementById('filter-area').value,
-      beds: document.getElementById('filter-beds').value,
-      baths: document.getElementById('filter-baths').value,
+      bedsMin: document.getElementById('filter-beds-min').value,
+      bedsMax: document.getElementById('filter-beds-max').value,
+      bathsMin: document.getElementById('filter-baths-min').value,
+      bathsMax: document.getElementById('filter-baths-max').value,
       sqftMin: document.getElementById('filter-sqft-min').value,
       sqftMax: document.getElementById('filter-sqft-max').value,
+      priceMin: document.getElementById('filter-price-min').value,
       priceMax: document.getElementById('filter-price-max').value,
+      hoa: document.getElementById('filter-hoa').value,
+      yearMin: document.getElementById('filter-year-min').value,
+      yearMax: document.getElementById('filter-year-max').value,
       type: document.getElementById('filter-type').value,
     };
   },
 
   _clearFilters(focusAreas) {
     document.getElementById('filter-area').value = 'all';
-    document.getElementById('filter-beds').value = '';
-    document.getElementById('filter-baths').value = '';
+    document.getElementById('filter-beds-min').value = '';
+    document.getElementById('filter-beds-max').value = '';
+    document.getElementById('filter-baths-min').value = '';
+    document.getElementById('filter-baths-max').value = '';
     document.getElementById('filter-sqft-min').value = '';
     document.getElementById('filter-sqft-max').value = '';
+    document.getElementById('filter-price-min').value = '';
     document.getElementById('filter-price-max').value = '';
+    document.getElementById('filter-hoa').value = '';
+    document.getElementById('filter-year-min').value = '';
+    document.getElementById('filter-year-max').value = '';
     document.getElementById('filter-type').value = '';
     this._customPolygon = null;
     this._disableDraw();
@@ -336,11 +383,18 @@ const PropertyExplorer = {
     }
 
     // Numeric filters
-    if (f.beds) homes = homes.filter(h => h.beds && h.beds >= Number(f.beds));
-    if (f.baths) homes = homes.filter(h => h.baths && h.baths >= Number(f.baths));
+    if (f.bedsMin) homes = homes.filter(h => h.beds != null && h.beds >= Number(f.bedsMin));
+    if (f.bedsMax) homes = homes.filter(h => h.beds != null && h.beds <= Number(f.bedsMax));
+    if (f.bathsMin) homes = homes.filter(h => h.baths != null && h.baths >= Number(f.bathsMin));
+    if (f.bathsMax) homes = homes.filter(h => h.baths != null && h.baths <= Number(f.bathsMax));
     if (f.sqftMin) homes = homes.filter(h => h.sqft && h.sqft >= Number(f.sqftMin));
     if (f.sqftMax) homes = homes.filter(h => h.sqft && h.sqft <= Number(f.sqftMax));
+    if (f.priceMin) homes = homes.filter(h => h.sale_price && h.sale_price >= Number(f.priceMin));
     if (f.priceMax) homes = homes.filter(h => h.sale_price && h.sale_price <= Number(f.priceMax));
+    if (f.hoa === 'none') homes = homes.filter(h => !h.hoa_monthly);
+    if (f.hoa === 'has') homes = homes.filter(h => h.hoa_monthly && h.hoa_monthly > 0);
+    if (f.yearMin) homes = homes.filter(h => h.year_built != null && h.year_built >= Number(f.yearMin));
+    if (f.yearMax) homes = homes.filter(h => h.year_built != null && h.year_built <= Number(f.yearMax));
     if (f.type) homes = homes.filter(h => h.property_type === f.type);
 
     this._filteredHomes = homes;
@@ -393,18 +447,20 @@ const PropertyExplorer = {
       { col: 'city', label: 'City' },
       { col: 'neighborhood', label: 'Neighborhood' },
       { col: 'sale_price', label: 'Price' },
+      { col: 'price_per_sqft', label: '$/SqFt' },
+      { col: 'sqft', label: 'SqFt' },
+      { col: 'lot_size_sqft', label: 'Lot SqFt' },
+      { col: null, label: 'House:Lot', sortable: false },
       { col: 'beds', label: 'Bd' },
       { col: 'baths', label: 'Ba' },
-      { col: 'sqft', label: 'SqFt' },
-      { col: 'price_per_sqft', label: '$/SqFt' },
-      { col: 'lot_size_sqft', label: 'Lot' },
       { col: 'year_built', label: 'Year' },
-      { col: 'days_on_market', label: 'DOM' },
       { col: 'total_assessed', label: 'Assessed' },
     ];
 
     const headerHtml = headers.map(h =>
-      `<th class="sortable" data-col="${h.col}">${h.label}${sortIcon(h.col)}</th>`
+      h.sortable === false
+        ? `<th>${h.label}</th>`
+        : `<th class="sortable" data-col="${h.col}">${h.label}${sortIcon(h.col)}</th>`
     ).join('');
 
     const rowsHtml = display.map(h => `
@@ -414,13 +470,13 @@ const PropertyExplorer = {
         <td>${h.city || '—'}</td>
         <td>${h.neighborhood || '—'}</td>
         <td>${Utils.formatCurrency(h.sale_price)}</td>
+        <td>${Utils.formatCurrency(h.price_per_sqft)}</td>
+        <td>${Utils.formatNumber(h.sqft)}</td>
+        <td>${Utils.formatNumber(h.lot_size_sqft)}</td>
+        <td>${h.sqft && h.lot_size_sqft ? '1\u00a0:\u00a0' + (h.lot_size_sqft / h.sqft).toFixed(1) : '—'}</td>
         <td>${h.beds ?? '—'}</td>
         <td>${h.baths ?? '—'}</td>
-        <td>${Utils.formatNumber(h.sqft)}</td>
-        <td>${Utils.formatCurrency(h.price_per_sqft)}</td>
-        <td>${Utils.formatNumber(h.lot_size_sqft)}</td>
         <td>${h.year_built ?? '—'}</td>
-        <td>${h.days_on_market ?? '—'}</td>
         <td>${Utils.formatCurrency(h.total_assessed)}</td>
       </tr>
     `).join('');
@@ -508,18 +564,17 @@ const PropertyExplorer = {
       ${comps.length > 0 ? `
         <table class="data-table comp-table">
           <thead><tr>
-            <th>Address</th><th>Price</th><th>Bd/Ba</th><th>SqFt</th><th>$/SqFt</th><th>Sold</th><th>DOM</th>
+            <th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th><th>Sold</th>
           </tr></thead>
           <tbody>
             ${comps.slice(0, 15).map(c => `
               <tr>
                 <td>${c.address}</td>
                 <td>${Utils.formatCurrency(c.sale_price)}</td>
-                <td>${c.beds}/${c.baths}</td>
-                <td>${Utils.formatNumber(c.sqft)}</td>
                 <td>${Utils.formatCurrency(c.price_per_sqft)}</td>
+                <td>${Utils.formatNumber(c.sqft)}</td>
+                <td>${c.beds}/${c.baths}</td>
                 <td>${c.sold_date || '—'}</td>
-                <td>${c.days_on_market ?? '—'}</td>
               </tr>
             `).join('')}
           </tbody>
