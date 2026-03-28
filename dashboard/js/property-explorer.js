@@ -15,6 +15,8 @@ const PropertyExplorer = {
   _areaPolygonsLayer: null,
   _customPolygon: null, // user-drawn polygon as [[lat,lng], ...]
   _markersByAddr: {}, // address -> Leaflet marker, for bidirectional hover
+  _photoTooltip: null,
+  _photoTimeout: null,
 
   init(container, data) {
     this._allHomes = data.sold_homes;
@@ -188,6 +190,7 @@ const PropertyExplorer = {
     });
 
     this._initMap();
+    this._initPhotoTooltip();
 
     // Show area polygon if a saved area is selected
     const areaVal = document.getElementById('filter-area').value;
@@ -337,14 +340,16 @@ const PropertyExplorer = {
         ${h.neighborhood || ''} ${h.city || ''} ${h.zip_code || ''}
       `, { maxWidth: 280 });
 
-      // Map hover → highlight corresponding table row
-      marker.on('mouseover', () => {
+      // Map hover → highlight corresponding table row + show photo
+      marker.on('mouseover', (e) => {
         marker.setRadius(9);
         marker.setStyle({ fillOpacity: 0.95 });
         marker.bringToFront();
         const row = Array.from(document.querySelectorAll('.clickable-row'))
           .find(r => r.dataset.addr === h.address);
         if (row) row.classList.add('row-map-highlight');
+        const me = e.originalEvent;
+        if (me) this._showPhoto(h, me.clientX, me.clientY);
       });
       marker.on('mouseout', () => {
         marker.setRadius(5);
@@ -352,6 +357,7 @@ const PropertyExplorer = {
         const row = Array.from(document.querySelectorAll('.clickable-row'))
           .find(r => r.dataset.addr === h.address);
         if (row) row.classList.remove('row-map-highlight');
+        this._hidePhoto();
       });
 
       if (h.address) this._markersByAddr[h.address] = marker;
@@ -540,13 +546,16 @@ const PropertyExplorer = {
     // Row hover -> swell map marker; row click -> show comps
     document.querySelectorAll('.clickable-row').forEach(tr => {
       const addr = tr.dataset.addr;
-      tr.addEventListener('mouseenter', () => {
+      tr.addEventListener('mouseenter', (e) => {
         const marker = this._markersByAddr[addr];
         if (marker) { marker.setRadius(9); marker.setStyle({ fillOpacity: 0.95 }); marker.bringToFront(); }
+        const home = homes.find(h => h.address === addr);
+        if (home) this._showPhoto(home, e.clientX, e.clientY);
       });
       tr.addEventListener('mouseleave', () => {
         const marker = this._markersByAddr[addr];
         if (marker) { marker.setRadius(5); marker.setStyle({ fillOpacity: 0.6 }); }
+        this._hidePhoto();
       });
       tr.addEventListener('click', () => {
         const home = homes.find(h => h.address === addr);
@@ -631,6 +640,39 @@ const PropertyExplorer = {
   _hideComps() {
     document.getElementById('comp-hover-card').style.display = 'none';
     document.getElementById('comp-hover-backdrop').style.display = 'none';
+  },
+
+  _initPhotoTooltip() {
+    const el = document.createElement('div');
+    el.className = 'photo-tooltip';
+    el.innerHTML = '<img class="photo-tooltip-img" src="" alt=""><div class="photo-tooltip-caption"></div>';
+    el.style.display = 'none';
+    document.body.appendChild(el);
+    this._photoTooltip = el;
+  },
+
+  _showPhoto(home, x, y) {
+    clearTimeout(this._photoTimeout);
+    if (!home.photo_url) return;
+    this._photoTimeout = setTimeout(() => {
+      const tip = this._photoTooltip;
+      tip.querySelector('.photo-tooltip-img').src = home.photo_url;
+      tip.querySelector('.photo-tooltip-caption').textContent = home.address || '';
+      // Position near cursor, flip if near viewport edge
+      const tw = 340, th = 240;
+      let left = x + 16, top = y - th / 2;
+      if (left + tw > window.innerWidth - 10) left = x - tw - 16;
+      if (top < 10) top = 10;
+      if (top + th > window.innerHeight - 10) top = window.innerHeight - th - 10;
+      tip.style.left = left + 'px';
+      tip.style.top = top + 'px';
+      tip.style.display = 'block';
+    }, 300);
+  },
+
+  _hidePhoto() {
+    clearTimeout(this._photoTimeout);
+    if (this._photoTooltip) this._photoTooltip.style.display = 'none';
   },
 
   _zillowUrl(h) {

@@ -14,6 +14,9 @@ And produces: dashboard_data.json for the dashboard to consume.
 import json
 import csv
 import os
+import re
+import time
+import urllib.request
 from datetime import datetime
 from statistics import median
 from pathlib import Path
@@ -161,6 +164,8 @@ def parse_sold_csv(path):
                     "property_type": row.get("property_type", "").strip() or None,
                     "latitude": safe_numeric(row.get("latitude")),
                     "longitude": safe_numeric(row.get("longitude")),
+                    "redfin_url": row.get("redfin_url", "").strip() or None,
+                    "photo_url": None,
                     # County data placeholders
                     "total_assessed": None,
                     "building_value": None,
@@ -341,6 +346,57 @@ def build_market_trends(config, market_data, homes):
     return trends, zip_areas
 
 
+def fetch_photo_url(redfin_url):
+    """Fetch the og:image URL from a Redfin listing page."""
+    try:
+        req = urllib.request.Request(redfin_url, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; housing-data-pipeline/1.0)",
+        })
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            # Read just enough to get the <head> section
+            html = resp.read(32000).decode("utf-8", errors="ignore")
+        match = re.search(r'og:image["\s]+content="([^"]+)"', html)
+        return match.group(1) if match else None
+    except Exception:
+        return None
+
+
+def fetch_photo_urls(homes):
+    """Fetch og:image photo URLs for all homes with Redfin URLs."""
+    # Load cache of previously fetched URLs to avoid re-fetching
+    cache_path = DATA_DIR / "photo_url_cache.json"
+    cache = {}
+    if cache_path.exists():
+        with open(cache_path) as f:
+            cache = json.load(f)
+
+    to_fetch = [h for h in homes if h.get("redfin_url") and h["redfin_url"] not in cache]
+    print(f"  {len(cache)} cached, {len(to_fetch)} to fetch")
+
+    for i, home in enumerate(to_fetch):
+        url = home["redfin_url"]
+        photo = fetch_photo_url(url)
+        cache[url] = photo  # cache None too, to avoid retrying broken pages
+        if (i + 1) % 25 == 0:
+            print(f"    Fetched {i + 1}/{len(to_fetch)}...")
+        time.sleep(0.5)
+
+    # Save updated cache
+    with open(cache_path, "w") as f:
+        json.dump(cache, f)
+
+    # Assign photo URLs to homes
+    assigned = 0
+    for home in homes:
+        url = home.get("redfin_url")
+        if url and cache.get(url):
+            home["photo_url"] = cache[url]
+            assigned += 1
+
+    print(f"  Assigned photo URLs to {assigned}/{len(homes)} homes")
+    return homes
+
+
 def main():
     """Main execution."""
     print("=" * 60)
@@ -372,6 +428,10 @@ def main():
     print("\nParsing county data...")
     county_data = parse_combined_csv(INPUT_FILES["combined"])
     homes = enrich_sold_homes(homes, county_data)
+
+    # Fetch property photos from Redfin listing pages
+    print("\nFetching property photos...")
+    homes = fetch_photo_urls(homes)
 
     # Read sold window metadata written by ingest_redfin_sold.py
     sold_meta_path = DATA_DIR / "redfin_sold_meta.json"

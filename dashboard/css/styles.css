@@ -913,3 +913,34 @@ body {
   padding: 2rem;
   font-size: 0.875rem;
 }
+
+/* === Photo Tooltip === */
+.photo-tooltip {
+  position: fixed;
+  z-index: 10000;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+  overflow: hidden;
+  pointer-events: none;
+  width: 340px;
+}
+
+.photo-tooltip-img {
+  width: 340px;
+  height: 200px;
+  display: block;
+  object-fit: cover;
+  background: var(--bg);
+}
+
+.photo-tooltip-caption {
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
