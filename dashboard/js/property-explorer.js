@@ -14,6 +14,7 @@ const PropertyExplorer = {
   _drawControl: null,
   _areaPolygonsLayer: null,
   _customPolygon: null, // user-drawn polygon as [[lat,lng], ...]
+  _markersByAddr: {}, // address -> Leaflet marker, for bidirectional hover
 
   init(container, data) {
     this._allHomes = data.sold_homes;
@@ -320,6 +321,7 @@ const PropertyExplorer = {
 
   _renderMarkers(homes) {
     this._markersLayer.clearLayers();
+    this._markersByAddr = {};
     homes.forEach(h => {
       if (h.latitude == null || h.longitude == null) return;
       const marker = L.circleMarker([h.latitude, h.longitude], {
@@ -334,6 +336,25 @@ const PropertyExplorer = {
         ${Utils.formatCurrency(h.sale_price)} · ${h.beds || '?'}bd/${h.baths || '?'}ba · ${Utils.formatNumber(h.sqft)} sqft<br>
         ${h.neighborhood || ''} ${h.city || ''} ${h.zip_code || ''}
       `, { maxWidth: 280 });
+
+      // Map hover → highlight corresponding table row
+      marker.on('mouseover', () => {
+        marker.setRadius(9);
+        marker.setStyle({ fillOpacity: 0.95 });
+        marker.bringToFront();
+        const row = Array.from(document.querySelectorAll('.clickable-row'))
+          .find(r => r.dataset.addr === h.address);
+        if (row) row.classList.add('row-map-highlight');
+      });
+      marker.on('mouseout', () => {
+        marker.setRadius(5);
+        marker.setStyle({ fillOpacity: 0.6 });
+        const row = Array.from(document.querySelectorAll('.clickable-row'))
+          .find(r => r.dataset.addr === h.address);
+        if (row) row.classList.remove('row-map-highlight');
+      });
+
+      if (h.address) this._markersByAddr[h.address] = marker;
       this._markersLayer.addLayer(marker);
     });
   },
@@ -456,14 +477,13 @@ const PropertyExplorer = {
       { col: 'city', label: 'City' },
       { col: 'neighborhood', label: 'Neighborhood' },
       { col: 'sale_price', label: 'Price' },
+      { col: null, label: '\u0394 Assessed', sortable: false },
+      { col: 'hoa_monthly', label: 'HOA/mo' },
       { col: 'price_per_sqft', label: '$/SqFt' },
       { col: 'sqft', label: 'SqFt' },
-      { col: 'lot_size_sqft', label: 'Lot SqFt' },
-      { col: null, label: 'House:Lot', sortable: false },
       { col: 'beds', label: 'Bd' },
       { col: 'baths', label: 'Ba' },
       { col: 'year_built', label: 'Year' },
-      { col: 'total_assessed', label: 'Assessed' },
     ];
 
     const headerHtml = headers.map(h =>
@@ -475,18 +495,23 @@ const PropertyExplorer = {
     const rowsHtml = display.map(h => `
       <tr class="clickable-row" data-addr="${(h.address || '').replace(/"/g, '&quot;')}">
         <td>${h.sold_date || '—'}</td>
-        <td class="addr-cell">${h.address || '—'}</td>
+        <td class="addr-cell"><a href="${this._zillowUrl(h)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${h.address || '—'}</a></td>
         <td>${h.city || '—'}</td>
         <td>${h.neighborhood || '—'}</td>
         <td>${Utils.formatCurrency(h.sale_price)}</td>
+        <td>${(() => {
+          if (h.sale_price == null || !h.total_assessed) return '—';
+          const diff = h.sale_price - h.total_assessed;
+          const pct = (diff / h.total_assessed * 100).toFixed(1);
+          const sign = diff >= 0 ? '+' : '';
+          return `${sign}${Utils.formatCurrency(diff)} (${sign}${pct}%)`;
+        })()}</td>
+        <td>${h.hoa_monthly != null ? Utils.formatCurrency(h.hoa_monthly) : '—'}</td>
         <td>${Utils.formatCurrency(h.price_per_sqft)}</td>
         <td>${Utils.formatNumber(h.sqft)}</td>
-        <td>${Utils.formatNumber(h.lot_size_sqft)}</td>
-        <td>${h.sqft && h.lot_size_sqft ? '1\u00a0:\u00a0' + (h.lot_size_sqft / h.sqft).toFixed(1) : '—'}</td>
         <td>${h.beds ?? '—'}</td>
         <td>${h.baths ?? '—'}</td>
         <td>${h.year_built ?? '—'}</td>
-        <td>${Utils.formatCurrency(h.total_assessed)}</td>
       </tr>
     `).join('');
 
@@ -512,10 +537,18 @@ const PropertyExplorer = {
       });
     });
 
-    // Row click -> show comps
+    // Row hover -> swell map marker; row click -> show comps
     document.querySelectorAll('.clickable-row').forEach(tr => {
+      const addr = tr.dataset.addr;
+      tr.addEventListener('mouseenter', () => {
+        const marker = this._markersByAddr[addr];
+        if (marker) { marker.setRadius(9); marker.setStyle({ fillOpacity: 0.95 }); marker.bringToFront(); }
+      });
+      tr.addEventListener('mouseleave', () => {
+        const marker = this._markersByAddr[addr];
+        if (marker) { marker.setRadius(5); marker.setStyle({ fillOpacity: 0.6 }); }
+      });
       tr.addEventListener('click', () => {
-        const addr = tr.dataset.addr;
         const home = homes.find(h => h.address === addr);
         if (home) this._showComps(home);
       });
@@ -549,7 +582,7 @@ const PropertyExplorer = {
       <h3>Comparable Sales Analysis</h3>
       <div class="comp-header">
         <div class="comp-subject">
-          <h4>${home.address}</h4>
+          <h4><a href="${this._zillowUrl(home)}" target="_blank" rel="noopener">${home.address}</a></h4>
           <p>${home.city} ${home.zip_code} · ${home.beds}bd/${home.baths}ba · ${Utils.formatNumber(home.sqft)} sqft</p>
           <p class="comp-price">Sold: ${Utils.formatCurrency(home.sale_price)} ${home.sold_date ? `on ${home.sold_date}` : ''}</p>
         </div>
@@ -578,7 +611,7 @@ const PropertyExplorer = {
           <tbody>
             ${comps.slice(0, 15).map(c => `
               <tr>
-                <td>${c.address}</td>
+                <td><a href="${this._zillowUrl(c)}" target="_blank" rel="noopener">${c.address}</a></td>
                 <td>${Utils.formatCurrency(c.sale_price)}</td>
                 <td>${Utils.formatCurrency(c.price_per_sqft)}</td>
                 <td>${Utils.formatNumber(c.sqft)}</td>
@@ -598,5 +631,15 @@ const PropertyExplorer = {
   _hideComps() {
     document.getElementById('comp-hover-card').style.display = 'none';
     document.getElementById('comp-hover-backdrop').style.display = 'none';
+  },
+
+  _zillowUrl(h) {
+    const parts = [h.address, h.city, 'NC', h.zip_code]
+      .filter(Boolean)
+      .join(' ')
+      .replace(/[^a-zA-Z0-9\s]/g, '')
+      .trim()
+      .replace(/\s+/g, '-');
+    return `https://www.zillow.com/homes/${parts}_rb/`;
   },
 };

@@ -662,6 +662,7 @@ body {
 
 .clickable-row { cursor: pointer; }
 .clickable-row:hover { background: #eff6ff !important; }
+.row-map-highlight { background: #eff6ff !important; }
 
 .addr-cell { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .area-name { font-weight: 550; }
