@@ -771,16 +771,43 @@ body {
 .results-summary strong { color: var(--text); }
 
 /* === Comp Detail === */
-.comp-detail {
+.comp-hover-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.18);
+  z-index: 999;
+}
+
+.comp-hover-card {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(680px, 92vw);
+  max-height: 78vh;
+  overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 1.25rem;
-  margin-top: 1rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  padding: 1.25rem 1.5rem;
+  z-index: 1000;
 }
 
-.comp-detail:empty { display: none; }
-.comp-detail h3 { font-size: 0.9375rem; font-weight: 600; margin-bottom: 0.75rem; }
+.comp-hover-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  font-size: 1.375rem;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.comp-hover-close:hover { color: var(--text); }
+
+.comp-hover-card h3 { font-size: 0.9375rem; font-weight: 600; margin-bottom: 0.75rem; }
 
 .comp-header {
   display: flex;

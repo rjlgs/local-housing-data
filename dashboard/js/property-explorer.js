@@ -130,7 +130,11 @@ const PropertyExplorer = {
       <div id="explorer-map" class="explorer-map"></div>
       <div id="results-summary" class="results-summary"></div>
       <div id="results-table-wrap" class="table-scroll"></div>
-      <div id="comp-detail" class="comp-detail"></div>
+      <div id="comp-hover-backdrop" class="comp-hover-backdrop" style="display:none"></div>
+      <div id="comp-hover-card" class="comp-hover-card" style="display:none">
+        <button class="comp-hover-close" id="comp-hover-close">&times;</button>
+        <div id="comp-hover-content"></div>
+      </div>
     `;
 
     // Learn More modal
@@ -138,6 +142,11 @@ const PropertyExplorer = {
     document.getElementById('pe-learn-more').addEventListener('click', () => peModal.style.display = 'flex');
     document.getElementById('pe-modal-close').addEventListener('click', () => peModal.style.display = 'none');
     peModal.addEventListener('click', (e) => { if (e.target === peModal) peModal.style.display = 'none'; });
+
+    // Comp hover card dismiss
+    document.getElementById('comp-hover-close').addEventListener('click', () => this._hideComps());
+    document.getElementById('comp-hover-backdrop').addEventListener('click', () => this._hideComps());
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') this._hideComps(); });
 
     // Restore saved filters
     const saved = Prefs.get('pe', {});
@@ -536,7 +545,7 @@ const PropertyExplorer = {
       ? ((home.sale_price - medianComp) / medianComp * 100).toFixed(1)
       : null;
 
-    document.getElementById('comp-detail').innerHTML = `
+    document.getElementById('comp-hover-content').innerHTML = `
       <h3>Comparable Sales Analysis</h3>
       <div class="comp-header">
         <div class="comp-subject">
@@ -582,7 +591,12 @@ const PropertyExplorer = {
       ` : '<p class="empty-state">No comparable sales found in the same zip code with similar specs.</p>'}
     `;
 
-    // Scroll to comp detail
-    document.getElementById('comp-detail').scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('comp-hover-card').style.display = 'block';
+    document.getElementById('comp-hover-backdrop').style.display = 'block';
+  },
+
+  _hideComps() {
+    document.getElementById('comp-hover-card').style.display = 'none';
+    document.getElementById('comp-hover-backdrop').style.display = 'none';
   },
 };
