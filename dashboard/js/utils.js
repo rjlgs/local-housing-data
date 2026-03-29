@@ -283,6 +283,135 @@ const MapUtils = {
     }
   },
 
+  // --- Linked map-table interaction ---
+
+  renderMarkers(opts) {
+    const { layer, data, rowSelector, colorFn, showPhoto, hidePhoto } = opts;
+    layer.clearLayers();
+    const byAddr = {};
+    data.forEach(h => {
+      if (h.latitude == null || h.longitude == null) return;
+      const fillColor = colorFn ? colorFn(h) : '#2563eb';
+      const strokeColor = colorFn ? fillColor : '#1d4ed8';
+      const marker = L.circleMarker([h.latitude, h.longitude], {
+        radius: 5, fillColor, color: strokeColor, weight: 1, fillOpacity: 0.6,
+      });
+      marker.on('mouseover', (e) => {
+        marker.setRadius(9); marker.setStyle({ fillOpacity: 0.95 }); marker.bringToFront();
+        if (rowSelector) {
+          const row = Array.from(document.querySelectorAll(rowSelector))
+            .find(r => r.dataset.addr === h.address);
+          if (row) row.classList.add('row-map-highlight');
+        }
+        const me = e.originalEvent;
+        if (me) showPhoto(h, me.clientX, me.clientY);
+      });
+      marker.on('mouseout', () => {
+        marker.setRadius(5); marker.setStyle({ fillOpacity: 0.6 });
+        if (rowSelector) {
+          const row = Array.from(document.querySelectorAll(rowSelector))
+            .find(r => r.dataset.addr === h.address);
+          if (row) row.classList.remove('row-map-highlight');
+        }
+        hidePhoto();
+      });
+      if (h.address) byAddr[h.address] = marker;
+      layer.addLayer(marker);
+    });
+    return byAddr;
+  },
+
+  bindTableMarkerHovers(opts) {
+    const { rows, items, markersByAddr, showPhoto, hidePhoto, onRowClick, defaultOpacity } = opts;
+    const rowEls = typeof rows === 'string' ? document.querySelectorAll(rows) : rows;
+    const restoreOpacity = defaultOpacity || 0.6;
+    rowEls.forEach((tr, i) => {
+      const addr = tr.dataset.addr;
+      const item = addr ? items.find(h => h.address === addr) : items[i];
+      if (!item) return;
+      tr.addEventListener('mouseenter', (e) => {
+        const m = markersByAddr[item.address];
+        if (m) { m.setRadius(9); m.setStyle({ fillOpacity: 0.95 }); m.bringToFront(); }
+        showPhoto(item, e.clientX, e.clientY);
+      });
+      tr.addEventListener('mouseleave', () => {
+        const m = markersByAddr[item.address];
+        if (m) { m.setRadius(5); m.setStyle({ fillOpacity: restoreOpacity }); }
+        hidePhoto();
+      });
+      if (onRowClick) {
+        tr.addEventListener('click', () => onRowClick(item));
+      }
+    });
+  },
+
+  sortData(data, col, asc) {
+    data.sort((a, b) => {
+      const va = a[col], vb = b[col];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      return asc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+    });
+  },
+
+  renderHeaders(headers, sortCol, sortAsc) {
+    const sortIcon = (col) => sortCol === col ? (sortAsc ? ' ▲' : ' ▼') : '';
+    return headers.map(h =>
+      h.sortable === false
+        ? `<th>${h.label}</th>`
+        : `<th class="sortable" data-col="${h.col}">${h.label}${sortIcon(h.col)}</th>`
+    ).join('');
+  },
+
+  bindSortHeaders(selector, sortState, defaultAscCols, onSort) {
+    document.querySelectorAll(selector).forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.dataset.col;
+        if (sortState.col === col) {
+          sortState.asc = !sortState.asc;
+        } else {
+          sortState.col = col;
+          sortState.asc = defaultAscCols.includes(col);
+        }
+        onSort();
+      });
+    });
+  },
+
+  applyAreaFilter(items, areas, customPolygon, focusAreas) {
+    if (areas.includes('custom') && customPolygon) {
+      return Utils.filterByArea(items, { polygon: customPolygon });
+    }
+    if (areas.length > 0 && !areas.includes('custom')) {
+      const matched = new Set();
+      areas.forEach(areaName => {
+        const areaConfig = focusAreas.find(fa => fa.name === areaName);
+        if (areaConfig) Utils.filterByArea(items, areaConfig).forEach(h => matched.add(h));
+      });
+      return items.filter(h => matched.has(h));
+    }
+    return items;
+  },
+
+  applyCommonFilters(items, f, priceField) {
+    let r = items;
+    if (f.bedsMin) r = r.filter(h => h.beds != null && h.beds >= Number(f.bedsMin));
+    if (f.bedsMax) r = r.filter(h => h.beds != null && h.beds <= Number(f.bedsMax));
+    if (f.bathsMin) r = r.filter(h => h.baths != null && h.baths >= Number(f.bathsMin));
+    if (f.bathsMax) r = r.filter(h => h.baths != null && h.baths <= Number(f.bathsMax));
+    if (f.sqftMin) r = r.filter(h => h.sqft && h.sqft >= Number(f.sqftMin));
+    if (f.sqftMax) r = r.filter(h => h.sqft && h.sqft <= Number(f.sqftMax));
+    if (f.priceMin) r = r.filter(h => h[priceField] && h[priceField] >= Number(f.priceMin));
+    if (f.priceMax) r = r.filter(h => h[priceField] && h[priceField] <= Number(f.priceMax));
+    if (f.hoa === 'none') r = r.filter(h => !h.hoa_monthly);
+    if (f.hoa === 'has') r = r.filter(h => h.hoa_monthly && h.hoa_monthly > 0);
+    if (f.yearMin) r = r.filter(h => h.year_built != null && h.year_built >= Number(f.yearMin));
+    if (f.yearMax) r = r.filter(h => h.year_built != null && h.year_built <= Number(f.yearMax));
+    if (f.type) r = r.filter(h => h.property_type === f.type);
+    return r;
+  },
+
   createCompMap(mapElId, subject, comps, opts) {
     const mapEl = document.getElementById(mapElId);
     if (!mapEl) return null;
@@ -480,22 +609,6 @@ const MapUtils = {
     }
   },
 
-  initCompTableHovers(comps, contentEl, markersByAddr, showPhotoFn, hidePhotoFn) {
-    contentEl.querySelectorAll('.comp-table tbody tr').forEach((row, i) => {
-      const comp = comps[i];
-      if (!comp) return;
-      row.addEventListener('mouseenter', (e) => {
-        showPhotoFn(comp, e.clientX, e.clientY);
-        const m = markersByAddr[comp.address];
-        if (m) { m.setRadius(9); m.setStyle({ fillOpacity: 0.95 }); m.bringToFront(); }
-      });
-      row.addEventListener('mouseleave', () => {
-        hidePhotoFn();
-        const m = markersByAddr[comp.address];
-        if (m) { m.setRadius(5); m.setStyle({ fillOpacity: 0.7 }); }
-      });
-    });
-  },
 };
 
 // --- Preferences persistence via localStorage ---

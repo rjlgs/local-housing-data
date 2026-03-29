@@ -7,8 +7,7 @@ const Listings = {
   _filteredListings: [],
   _allListings: [],
   _allSold: [],
-  _sortCol: 'first_seen',
-  _sortAsc: false,
+  _sort: { col: 'first_seen', asc: false },
   _map: null,
   _markersLayer: null,
   _drawnItems: null,
@@ -22,8 +21,23 @@ const Listings = {
   _compMap: null,
   _compMarkersByAddr: {},
 
-  // How many days counts as "new"
   NEW_DAYS: 3,
+
+  _headers: [
+    { col: 'first_seen', label: 'Listed' },
+    { col: 'address', label: 'Address' },
+    { col: 'city', label: 'City' },
+    { col: 'list_price', label: 'Price' },
+    { col: null, label: 'Value', sortable: false },
+    { col: 'price_change', label: 'Price \u0394' },
+    { col: 'hoa_monthly', label: 'HOA/mo' },
+    { col: 'price_per_sqft', label: '$/SqFt' },
+    { col: 'sqft', label: 'SqFt' },
+    { col: 'beds', label: 'Bd' },
+    { col: 'baths', label: 'Ba' },
+    { col: 'year_built', label: 'Year' },
+    { col: 'days_on_market', label: 'DOM' },
+  ],
 
   init(container, data) {
     this._allListings = data.active_listings || [];
@@ -33,8 +47,7 @@ const Listings = {
 
     const freshness = data.data_freshness || {};
     const lastUpdated = freshness.active_listings
-      ? MapUtils.formatAge(freshness.active_listings)
-      : 'unknown';
+      ? MapUtils.formatAge(freshness.active_listings) : 'unknown';
 
     container.innerHTML = `
       <div class="tab-header">
@@ -204,43 +217,22 @@ const Listings = {
     // Bind events
     document.getElementById('ls-filter-apply').addEventListener('click', () => this._applyFilters(focusAreas));
     document.getElementById('ls-filter-clear').addEventListener('click', () => this._clearFilters(focusAreas));
-
     container.querySelectorAll('input').forEach(el => {
-      el.addEventListener('keydown', e => {
-        if (e.key === 'Enter') this._applyFilters(focusAreas);
-      });
+      el.addEventListener('keydown', e => { if (e.key === 'Enter') this._applyFilters(focusAreas); });
     });
 
     this._initMap();
     this._photoTooltip = MapUtils.createPhotoTooltip();
-    this._initAreaMultiSelect(focusAreas);
-
-    this._applyFilters(focusAreas);
-  },
-
-  _initAreaMultiSelect(focusAreas) {
     MapUtils.initAreaMultiSelect({
-      optionsElId: 'ls-area-options',
-      dropdownElId: 'ls-area-dropdown',
-      triggerElId: 'ls-area-trigger',
-      selectElId: 'ls-area-select',
-      focusAreas,
-      selectedAreas: this._selectedAreas,
-      onChanged: () => {
-        this._updateAreaTrigger(focusAreas);
-        this._applyFilters(focusAreas);
-      },
+      optionsElId: 'ls-area-options', dropdownElId: 'ls-area-dropdown',
+      triggerElId: 'ls-area-trigger', selectElId: 'ls-area-select',
+      focusAreas, selectedAreas: this._selectedAreas,
+      onChanged: () => { this._updateAreaTrigger(); this._applyFilters(focusAreas); },
       enableDraw: () => this._enableDraw(),
-      disableDraw: () => {
-        this._disableDraw();
-        this._customPolygon = null;
-      },
+      disableDraw: () => { this._disableDraw(); this._customPolygon = null; },
     });
-    this._updateAreaTrigger(focusAreas);
-  },
-
-  _updateAreaTrigger(focusAreas) {
-    MapUtils.updateAreaTrigger('#ls-area-trigger', this._selectedAreas, focusAreas);
+    this._updateAreaTrigger();
+    this._applyFilters(focusAreas);
   },
 
   _initMap() {
@@ -249,86 +241,44 @@ const Listings = {
     this._drawnItems = L.featureGroup().addTo(this._map);
     this._markersLayer = L.layerGroup().addTo(this._map);
     this._drawControl = MapUtils.createDrawControl(this._drawnItems);
-
     MapUtils.bindDrawEvents(this._map, this._drawnItems, {
-      onCreated: (polygon) => {
-        this._customPolygon = polygon;
-        this._applyFilters(this._focusAreas);
-      },
+      onCreated: (polygon) => { this._customPolygon = polygon; this._applyFilters(this._focusAreas); },
       onDeleted: () => {
         this._customPolygon = null;
         this._selectedAreas.delete('custom');
-        const customCb = document.querySelector('#ls-area-options [data-key="custom"] input');
-        if (customCb) customCb.checked = false;
-        this._updateAreaTrigger(this._focusAreas);
+        const cb = document.querySelector('#ls-area-options [data-key="custom"] input');
+        if (cb) cb.checked = false;
+        this._updateAreaTrigger();
         this._applyFilters(this._focusAreas);
       },
-      onEdited: (polygon) => {
-        this._customPolygon = polygon;
-        this._applyFilters(this._focusAreas);
-      },
+      onEdited: (polygon) => { this._customPolygon = polygon; this._applyFilters(this._focusAreas); },
     });
-
     this._renderMarkers(this._allListings);
   },
 
-  _enableDraw() {
-    MapUtils.enableDraw(this._map, this._drawControl);
-  },
-
-  _disableDraw() {
-    MapUtils.disableDraw(this._map, this._drawControl, this._drawnItems);
-  },
-
-  _showAreaPolygons(areaNames, focusAreas, filteredItems) {
-    MapUtils.showAreaPolygons(this._map, this._areaPolygonsLayer, areaNames, focusAreas, filteredItems);
-  },
+  _enableDraw() { MapUtils.enableDraw(this._map, this._drawControl); },
+  _disableDraw() { MapUtils.disableDraw(this._map, this._drawControl, this._drawnItems); },
+  _updateAreaTrigger() { MapUtils.updateAreaTrigger('#ls-area-trigger', this._selectedAreas, this._focusAreas); },
 
   _markerColor(listing) {
-    if (listing.price_change && listing.price_change < 0) return '#16a34a'; // green for price drop
-    if (this._isNew(listing)) return '#ea580c'; // orange for new
-    return '#2563eb'; // default blue
+    if (listing.price_change && listing.price_change < 0) return '#16a34a';
+    if (this._isNew(listing)) return '#ea580c';
+    return '#2563eb';
   },
 
   _isNew(listing) {
     if (!listing.first_seen) return false;
-    try {
-      const seen = new Date(listing.first_seen);
-      const now = new Date();
-      return (now - seen) / 86400000 <= this.NEW_DAYS;
-    } catch { return false; }
+    try { return (new Date() - new Date(listing.first_seen)) / 86400000 <= this.NEW_DAYS; }
+    catch { return false; }
   },
 
   _renderMarkers(listings) {
-    this._markersLayer.clearLayers();
-    this._markersByAddr = {};
-    listings.forEach(h => {
-      if (h.latitude == null || h.longitude == null) return;
-      const color = this._markerColor(h);
-      const marker = L.circleMarker([h.latitude, h.longitude], {
-        radius: 5, fillColor: color, color: color, weight: 1, fillOpacity: 0.6,
-      });
-      marker.on('mouseover', (e) => {
-        marker.setRadius(9);
-        marker.setStyle({ fillOpacity: 0.95 });
-        marker.bringToFront();
-        const row = Array.from(document.querySelectorAll('#ls-results-table-wrap .clickable-row'))
-          .find(r => r.dataset.addr === h.address);
-        if (row) row.classList.add('row-map-highlight');
-        const me = e.originalEvent;
-        if (me) this._showPhoto(h, me.clientX, me.clientY);
-      });
-      marker.on('mouseout', () => {
-        marker.setRadius(5);
-        marker.setStyle({ fillOpacity: 0.6 });
-        const row = Array.from(document.querySelectorAll('#ls-results-table-wrap .clickable-row'))
-          .find(r => r.dataset.addr === h.address);
-        if (row) row.classList.remove('row-map-highlight');
-        this._hidePhoto();
-      });
-
-      if (h.address) this._markersByAddr[h.address] = marker;
-      this._markersLayer.addLayer(marker);
+    this._markersByAddr = MapUtils.renderMarkers({
+      layer: this._markersLayer, data: listings,
+      rowSelector: '#ls-results-table-wrap .clickable-row',
+      colorFn: (h) => this._markerColor(h),
+      showPhoto: (h, x, y) => this._showPhoto(h, x, y),
+      hidePhoto: () => this._hidePhoto(),
     });
   },
 
@@ -354,20 +304,11 @@ const Listings = {
   _clearFilters(focusAreas) {
     this._selectedAreas = new Set();
     document.querySelectorAll('#ls-area-options input[type="checkbox"]').forEach(cb => cb.checked = false);
-    this._updateAreaTrigger(focusAreas);
-    document.getElementById('ls-filter-beds-min').value = '';
-    document.getElementById('ls-filter-beds-max').value = '';
-    document.getElementById('ls-filter-baths-min').value = '';
-    document.getElementById('ls-filter-baths-max').value = '';
-    document.getElementById('ls-filter-sqft-min').value = '';
-    document.getElementById('ls-filter-sqft-max').value = '';
-    document.getElementById('ls-filter-price-min').value = '';
-    document.getElementById('ls-filter-price-max').value = '';
-    document.getElementById('ls-filter-hoa').value = '';
-    document.getElementById('ls-filter-year-min').value = '';
-    document.getElementById('ls-filter-year-max').value = '';
-    document.getElementById('ls-filter-type').value = '';
-    document.getElementById('ls-filter-status').value = '';
+    this._updateAreaTrigger();
+    ['ls-filter-beds-min','ls-filter-beds-max','ls-filter-baths-min','ls-filter-baths-max',
+     'ls-filter-sqft-min','ls-filter-sqft-max','ls-filter-price-min','ls-filter-price-max',
+     'ls-filter-hoa','ls-filter-year-min','ls-filter-year-max','ls-filter-type','ls-filter-status',
+    ].forEach(id => document.getElementById(id).value = '');
     this._customPolygon = null;
     this._disableDraw();
     this._areaPolygonsLayer.clearLayers();
@@ -377,36 +318,10 @@ const Listings = {
   _applyFilters(focusAreas) {
     const f = this._getFilters();
     Prefs.set('ls', f);
-    let listings = [...this._allListings];
+    let listings = MapUtils.applyAreaFilter([...this._allListings], f.areas, this._customPolygon, focusAreas);
+    listings = MapUtils.applyCommonFilters(listings, f, 'list_price');
 
-    // Area filter
-    if (f.areas.includes('custom') && this._customPolygon) {
-      listings = Utils.filterByArea(listings, { polygon: this._customPolygon });
-    } else if (f.areas.length > 0 && !f.areas.includes('custom')) {
-      const matched = new Set();
-      f.areas.forEach(areaName => {
-        const areaConfig = focusAreas.find(fa => fa.name === areaName);
-        if (areaConfig) Utils.filterByArea(listings, areaConfig).forEach(h => matched.add(h));
-      });
-      listings = listings.filter(h => matched.has(h));
-    }
-
-    // Numeric filters
-    if (f.bedsMin) listings = listings.filter(h => h.beds != null && h.beds >= Number(f.bedsMin));
-    if (f.bedsMax) listings = listings.filter(h => h.beds != null && h.beds <= Number(f.bedsMax));
-    if (f.bathsMin) listings = listings.filter(h => h.baths != null && h.baths >= Number(f.bathsMin));
-    if (f.bathsMax) listings = listings.filter(h => h.baths != null && h.baths <= Number(f.bathsMax));
-    if (f.sqftMin) listings = listings.filter(h => h.sqft && h.sqft >= Number(f.sqftMin));
-    if (f.sqftMax) listings = listings.filter(h => h.sqft && h.sqft <= Number(f.sqftMax));
-    if (f.priceMin) listings = listings.filter(h => h.list_price && h.list_price >= Number(f.priceMin));
-    if (f.priceMax) listings = listings.filter(h => h.list_price && h.list_price <= Number(f.priceMax));
-    if (f.hoa === 'none') listings = listings.filter(h => !h.hoa_monthly);
-    if (f.hoa === 'has') listings = listings.filter(h => h.hoa_monthly && h.hoa_monthly > 0);
-    if (f.yearMin) listings = listings.filter(h => h.year_built != null && h.year_built >= Number(f.yearMin));
-    if (f.yearMax) listings = listings.filter(h => h.year_built != null && h.year_built <= Number(f.yearMax));
-    if (f.type) listings = listings.filter(h => h.property_type === f.type);
-
-    // Status filters
+    // Listings-specific status filters
     if (f.status === 'new') listings = listings.filter(h => this._isNew(h));
     if (f.status === 'price-drop') listings = listings.filter(h => h.price_change && h.price_change < 0);
 
@@ -415,81 +330,41 @@ const Listings = {
 
     const namedAreas = f.areas.filter(a => a !== 'custom');
     if (namedAreas.length > 0) {
-      this._showAreaPolygons(namedAreas, focusAreas, listings);
+      MapUtils.showAreaPolygons(this._map, this._areaPolygonsLayer, namedAreas, focusAreas, listings);
     }
-
     this._renderResults(listings);
   },
 
   _renderResults(listings) {
-    // Summary stats
     const prices = listings.map(h => h.list_price).filter(v => v != null);
     const sqfts = listings.map(h => h.sqft).filter(v => v != null);
-    const medianPrice = Utils.median(prices);
-    const medianSqft = Utils.median(sqfts);
-    const medianPpsf = Utils.median(listings.map(h => h.price_per_sqft).filter(v => v != null));
     const newCount = listings.filter(h => this._isNew(h)).length;
     const dropCount = listings.filter(h => h.price_change && h.price_change < 0).length;
 
     document.getElementById('ls-results-summary').innerHTML = `
       <span><strong>${listings.length}</strong> listings</span>
-      <span>Median: <strong>${Utils.formatCurrency(medianPrice)}</strong></span>
-      <span>Median SqFt: <strong>${Utils.formatNumber(medianSqft)}</strong></span>
-      <span>Median $/SqFt: <strong>${Utils.formatCurrency(medianPpsf)}</strong></span>
+      <span>Median: <strong>${Utils.formatCurrency(Utils.median(prices))}</strong></span>
+      <span>Median SqFt: <strong>${Utils.formatNumber(Utils.median(sqfts))}</strong></span>
+      <span>Median $/SqFt: <strong>${Utils.formatCurrency(Utils.median(listings.map(h => h.price_per_sqft).filter(v => v != null)))}</strong></span>
       ${newCount > 0 ? `<span class="badge badge-new">${newCount} new</span>` : ''}
       ${dropCount > 0 ? `<span class="badge badge-drop">${dropCount} price drops</span>` : ''}
     `;
 
-    // Sort
-    listings.sort((a, b) => {
-      const va = a[this._sortCol], vb = b[this._sortCol];
-      if (va == null && vb == null) return 0;
-      if (va == null) return 1;
-      if (vb == null) return -1;
-      return this._sortAsc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
-    });
-
+    MapUtils.sortData(listings, this._sort.col, this._sort.asc);
     const display = listings.slice(0, 200);
-    const sortIcon = (col) => this._sortCol === col ? (this._sortAsc ? ' \u25b2' : ' \u25bc') : '';
-
-    const headers = [
-      { col: 'first_seen', label: 'Listed' },
-      { col: 'address', label: 'Address' },
-      { col: 'city', label: 'City' },
-      { col: 'list_price', label: 'Price' },
-      { col: null, label: 'Value', sortable: false },
-      { col: 'price_change', label: 'Price \u0394' },
-      { col: 'hoa_monthly', label: 'HOA/mo' },
-      { col: 'price_per_sqft', label: '$/SqFt' },
-      { col: 'sqft', label: 'SqFt' },
-      { col: 'beds', label: 'Bd' },
-      { col: 'baths', label: 'Ba' },
-      { col: 'year_built', label: 'Year' },
-      { col: 'days_on_market', label: 'DOM' },
-    ];
-
-    const headerHtml = headers.map(h =>
-      h.sortable === false
-        ? `<th>${h.label}</th>`
-        : `<th class="sortable" data-col="${h.col}">${h.label}${sortIcon(h.col)}</th>`
-    ).join('');
+    const headerHtml = MapUtils.renderHeaders(this._headers, this._sort.col, this._sort.asc);
 
     const rowsHtml = display.map(h => {
       const badges = [];
       if (this._isNew(h)) badges.push('<span class="badge badge-new">NEW</span>');
       if (h.price_change && h.price_change < 0) badges.push('<span class="badge badge-drop">DROP</span>');
-
-      // Value indicator: compare asking price to median of sold comps
       const valueHtml = this._valueIndicator(h);
-
-      // Price change display
       let priceChangeHtml = '\u2014';
       if (h.price_change && h.price_change !== 0) {
         const sign = h.price_change > 0 ? '+' : '';
         const cls = h.price_change < 0 ? 'delta-down' : 'delta-up';
         priceChangeHtml = `<span class="${cls}">${sign}${Utils.formatCurrency(h.price_change)}</span>`;
       }
-
       return `
         <tr class="clickable-row" data-addr="${(h.address || '').replace(/"/g, '&quot;')}">
           <td>${Utils.formatDate(h.first_seen)} ${badges.join(' ')}</td>
@@ -510,52 +385,24 @@ const Listings = {
     }).join('');
 
     document.getElementById('ls-results-table-wrap').innerHTML = `
-      <table class="data-table">
-        <thead><tr>${headerHtml}</tr></thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
+      <table class="data-table"><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table>
       ${listings.length > 200 ? `<p class="table-note">Showing 200 of ${listings.length} results</p>` : ''}
     `;
 
-    // Sortable headers
-    document.querySelectorAll('#ls-results-table-wrap .sortable').forEach(th => {
-      th.addEventListener('click', () => {
-        const col = th.dataset.col;
-        if (this._sortCol === col) {
-          this._sortAsc = !this._sortAsc;
-        } else {
-          this._sortCol = col;
-          this._sortAsc = col === 'address' || col === 'first_seen';
-        }
-        this._renderResults(this._filteredListings);
-      });
-    });
+    MapUtils.bindSortHeaders('#ls-results-table-wrap .sortable', this._sort, ['address', 'first_seen'],
+      () => this._renderResults(this._filteredListings));
 
-    // Row hover + click
-    document.querySelectorAll('#ls-results-table-wrap .clickable-row').forEach(tr => {
-      const addr = tr.dataset.addr;
-      tr.addEventListener('mouseenter', (e) => {
-        const marker = this._markersByAddr[addr];
-        if (marker) { marker.setRadius(9); marker.setStyle({ fillOpacity: 0.95 }); marker.bringToFront(); }
-        const home = listings.find(h => h.address === addr);
-        if (home) this._showPhoto(home, e.clientX, e.clientY);
-      });
-      tr.addEventListener('mouseleave', () => {
-        const marker = this._markersByAddr[addr];
-        if (marker) { marker.setRadius(5); marker.setStyle({ fillOpacity: 0.6 }); }
-        this._hidePhoto();
-      });
-      tr.addEventListener('click', () => {
-        const listing = listings.find(h => h.address === addr);
-        if (listing) this._showComps(listing);
-      });
+    MapUtils.bindTableMarkerHovers({
+      rows: '#ls-results-table-wrap .clickable-row', items: listings,
+      markersByAddr: this._markersByAddr,
+      showPhoto: (h, x, y) => this._showPhoto(h, x, y),
+      hidePhoto: () => this._hidePhoto(),
+      onRowClick: (h) => this._showComps(h),
     });
   },
 
   _valueIndicator(listing) {
     if (!listing.list_price || !listing.zip_code) return '\u2014';
-
-    // Find sold comps: same zip, similar beds (±1), similar sqft (±25%)
     const sqft = listing.sqft || 0;
     const beds = listing.beds || 0;
     const comps = this._allSold.filter(h =>
@@ -564,12 +411,9 @@ const Listings = {
       h.sqft != null && sqft > 0 && h.sqft >= sqft * 0.75 && h.sqft <= sqft * 1.25 &&
       h.sale_price != null
     );
-
     if (comps.length < 2) return '\u2014';
-
     const medianSold = Utils.median(comps.map(h => h.sale_price));
     if (!medianSold) return '\u2014';
-
     const diff = ((listing.list_price - medianSold) / medianSold * 100).toFixed(0);
     const sign = diff >= 0 ? '+' : '';
     const cls = diff <= -3 ? 'delta-down' : diff >= 3 ? 'delta-up' : '';
@@ -586,24 +430,18 @@ const Listings = {
       h.sale_price != null
     );
 
-    const compPrices = comps.map(h => h.sale_price);
-    const medianComp = Utils.median(compPrices);
-
+    const medianComp = Utils.median(comps.map(h => h.sale_price));
     const assessedDiff = listing.total_assessed && listing.list_price
-      ? ((listing.list_price - listing.total_assessed) / listing.total_assessed * 100).toFixed(1)
-      : null;
-
+      ? ((listing.list_price - listing.total_assessed) / listing.total_assessed * 100).toFixed(1) : null;
     const compDiff = medianComp && listing.list_price
-      ? ((listing.list_price - medianComp) / medianComp * 100).toFixed(1)
-      : null;
+      ? ((listing.list_price - medianComp) / medianComp * 100).toFixed(1) : null;
 
     const priceDropInfo = listing.price_change && listing.price_change < 0
       ? `<div class="metric">
            <span class="metric-label">Price Drops</span>
            <span class="metric-value delta-down">${Utils.formatCurrency(listing.price_change)}</span>
            <span class="metric-delta">${listing.price_drop_count || 1} reduction${(listing.price_drop_count || 1) > 1 ? 's' : ''}</span>
-         </div>`
-      : '';
+         </div>` : '';
 
     document.getElementById('ls-comp-content').innerHTML = `
       <h3>Is This Price Reasonable?</h3>
@@ -636,42 +474,37 @@ const Listings = {
       </div>
       <div id="ls-comp-map" class="comp-map"></div>
       ${comps.length > 0 ? `
-        <table class="data-table comp-table">
-          <thead><tr>
-            <th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
-          </tr></thead>
-          <tbody>
-            ${comps.slice(0, 15).map(c => `
-              <tr>
-                <td>${Utils.formatDate(c.sold_date)}</td>
-                <td class="addr-cell"><a href="${c.redfin_url || '#'}" target="_blank" rel="noopener">${c.address}</a></td>
-                <td>${Utils.formatCurrency(c.sale_price)}</td>
-                <td>${Utils.formatCurrency(c.price_per_sqft)}</td>
-                <td>${Utils.formatNumber(c.sqft)}</td>
-                <td>${c.beds}/${c.baths}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+        <table class="data-table comp-table"><thead><tr>
+          <th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
+        </tr></thead><tbody>
+          ${comps.slice(0, 15).map(c => `<tr>
+            <td>${Utils.formatDate(c.sold_date)}</td>
+            <td class="addr-cell"><a href="${c.redfin_url || '#'}" target="_blank" rel="noopener">${c.address}</a></td>
+            <td>${Utils.formatCurrency(c.sale_price)}</td>
+            <td>${Utils.formatCurrency(c.price_per_sqft)}</td>
+            <td>${Utils.formatNumber(c.sqft)}</td>
+            <td>${c.beds}/${c.baths}</td>
+          </tr>`).join('')}
+        </tbody></table>
       ` : '<p class="empty-state">No comparable recent sales found in the same zip code with similar specs.</p>'}
     `;
 
     document.getElementById('ls-comp-card').style.display = 'block';
     document.getElementById('ls-comp-backdrop').style.display = 'block';
     this._initCompMap(listing, comps);
-    MapUtils.initCompTableHovers(
-      comps.slice(0, 15),
-      document.getElementById('ls-comp-content'),
-      this._compMarkersByAddr,
-      (h, x, y) => this._showPhoto(h, x, y),
-      () => this._hidePhoto()
-    );
+
+    MapUtils.bindTableMarkerHovers({
+      rows: document.querySelectorAll('#ls-comp-content .comp-table tbody tr'),
+      items: comps.slice(0, 15), markersByAddr: this._compMarkersByAddr,
+      showPhoto: (h, x, y) => this._showPhoto(h, x, y),
+      hidePhoto: () => this._hidePhoto(),
+      defaultOpacity: 0.7,
+    });
   },
 
   _initCompMap(listing, comps) {
     if (this._compMap) { this._compMap.remove(); this._compMap = null; }
     this._compMarkersByAddr = {};
-
     const result = MapUtils.createCompMap('ls-comp-map', listing, comps, {
       subjectLabel: 'listing',
       onCompHover: (c, e, isOver) => {
@@ -680,11 +513,7 @@ const Listings = {
         if (!isOver) this._hidePhoto();
       },
     });
-
-    if (result) {
-      this._compMap = result.map;
-      this._compMarkersByAddr = result.markersByAddr;
-    }
+    if (result) { this._compMap = result.map; this._compMarkersByAddr = result.markersByAddr; }
   },
 
   _hideComps() {
@@ -693,11 +522,6 @@ const Listings = {
     if (this._compMap) { this._compMap.remove(); this._compMap = null; }
   },
 
-  _showPhoto(listing, x, y) {
-    MapUtils.showPhoto(this._photoTooltip, this._photoTimeout, listing, x, y, 'list_price');
-  },
-
-  _hidePhoto() {
-    MapUtils.hidePhoto(this._photoTooltip, this._photoTimeout);
-  },
+  _showPhoto(listing, x, y) { MapUtils.showPhoto(this._photoTooltip, this._photoTimeout, listing, x, y, 'list_price'); },
+  _hidePhoto() { MapUtils.hidePhoto(this._photoTooltip, this._photoTimeout); },
 };

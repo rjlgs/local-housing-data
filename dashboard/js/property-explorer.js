@@ -6,20 +6,34 @@
 const PropertyExplorer = {
   _filteredHomes: [],
   _allHomes: [],
-  _sortCol: 'sold_date',
-  _sortAsc: false,
+  _sort: { col: 'sold_date', asc: false },
   _map: null,
   _markersLayer: null,
   _drawnItems: null,
   _drawControl: null,
   _areaPolygonsLayer: null,
-  _customPolygon: null, // user-drawn polygon as [[lat,lng], ...]
-  _selectedAreas: new Set(), // names of selected focus areas (empty = all)
-  _markersByAddr: {}, // address -> Leaflet marker, for bidirectional hover
+  _customPolygon: null,
+  _selectedAreas: new Set(),
+  _markersByAddr: {},
   _photoTooltip: null,
   _photoTimeout: { id: null },
   _compMap: null,
   _compMarkersByAddr: {},
+
+  _headers: [
+    { col: 'sold_date', label: 'Sold' },
+    { col: 'address', label: 'Address' },
+    { col: 'city', label: 'City' },
+    { col: 'neighborhood', label: 'Neighborhood' },
+    { col: 'sale_price', label: 'Price' },
+    { col: null, label: '\u0394 Assessed', sortable: false },
+    { col: 'hoa_monthly', label: 'HOA/mo' },
+    { col: 'price_per_sqft', label: '$/SqFt' },
+    { col: 'sqft', label: 'SqFt' },
+    { col: 'beds', label: 'Bd' },
+    { col: 'baths', label: 'Ba' },
+    { col: 'year_built', label: 'Year' },
+  ],
 
   init(container, data) {
     this._allHomes = data.sold_homes;
@@ -178,19 +192,21 @@ const PropertyExplorer = {
     // Bind events
     document.getElementById('filter-apply').addEventListener('click', () => this._applyFilters(focusAreas));
     document.getElementById('filter-clear').addEventListener('click', () => this._clearFilters(focusAreas));
-
-    // Also apply on Enter in any input
     container.querySelectorAll('input').forEach(el => {
-      el.addEventListener('keydown', e => {
-        if (e.key === 'Enter') this._applyFilters(focusAreas);
-      });
+      el.addEventListener('keydown', e => { if (e.key === 'Enter') this._applyFilters(focusAreas); });
     });
 
     this._initMap();
     this._photoTooltip = MapUtils.createPhotoTooltip();
-    this._initAreaMultiSelect(focusAreas);
-
-    // Initial render with saved or default filters
+    MapUtils.initAreaMultiSelect({
+      optionsElId: 'pe-area-options', dropdownElId: 'pe-area-dropdown',
+      triggerElId: 'pe-area-trigger', selectElId: 'pe-area-select',
+      focusAreas, selectedAreas: this._selectedAreas,
+      onChanged: () => { this._updateAreaTrigger(); this._applyFilters(focusAreas); },
+      enableDraw: () => this._enableDraw(),
+      disableDraw: () => { this._disableDraw(); this._customPolygon = null; },
+    });
+    this._updateAreaTrigger();
     this._applyFilters(focusAreas);
   },
 
@@ -200,75 +216,31 @@ const PropertyExplorer = {
     this._drawnItems = L.featureGroup().addTo(this._map);
     this._markersLayer = L.layerGroup().addTo(this._map);
     this._drawControl = MapUtils.createDrawControl(this._drawnItems);
-
     MapUtils.bindDrawEvents(this._map, this._drawnItems, {
-      onCreated: (polygon) => {
-        this._customPolygon = polygon;
-        this._applyFilters(this._focusAreas);
-      },
+      onCreated: (polygon) => { this._customPolygon = polygon; this._applyFilters(this._focusAreas); },
       onDeleted: () => {
         this._customPolygon = null;
         this._selectedAreas.delete('custom');
-        const customCb = document.querySelector('#pe-area-options [data-key="custom"] input');
-        if (customCb) customCb.checked = false;
-        this._updateAreaTrigger(this._focusAreas);
+        const cb = document.querySelector('#pe-area-options [data-key="custom"] input');
+        if (cb) cb.checked = false;
+        this._updateAreaTrigger();
         this._applyFilters(this._focusAreas);
       },
-      onEdited: (polygon) => {
-        this._customPolygon = polygon;
-        this._applyFilters(this._focusAreas);
-      },
+      onEdited: (polygon) => { this._customPolygon = polygon; this._applyFilters(this._focusAreas); },
     });
-
     this._renderMarkers(this._allHomes);
   },
 
-  _enableDraw() {
-    MapUtils.enableDraw(this._map, this._drawControl);
-  },
-
-  _disableDraw() {
-    MapUtils.disableDraw(this._map, this._drawControl, this._drawnItems);
-  },
-
-  _showAreaPolygons(areaNames, focusAreas, filteredHomes) {
-    MapUtils.showAreaPolygons(this._map, this._areaPolygonsLayer, areaNames, focusAreas, filteredHomes);
-  },
+  _enableDraw() { MapUtils.enableDraw(this._map, this._drawControl); },
+  _disableDraw() { MapUtils.disableDraw(this._map, this._drawControl, this._drawnItems); },
+  _updateAreaTrigger() { MapUtils.updateAreaTrigger('#pe-area-trigger', this._selectedAreas, this._focusAreas); },
 
   _renderMarkers(homes) {
-    this._markersLayer.clearLayers();
-    this._markersByAddr = {};
-    homes.forEach(h => {
-      if (h.latitude == null || h.longitude == null) return;
-      const marker = L.circleMarker([h.latitude, h.longitude], {
-        radius: 5,
-        fillColor: '#2563eb',
-        color: '#1d4ed8',
-        weight: 1,
-        fillOpacity: 0.6,
-      });
-      // Map hover → highlight corresponding table row + show photo
-      marker.on('mouseover', (e) => {
-        marker.setRadius(9);
-        marker.setStyle({ fillOpacity: 0.95 });
-        marker.bringToFront();
-        const row = Array.from(document.querySelectorAll('.clickable-row'))
-          .find(r => r.dataset.addr === h.address);
-        if (row) row.classList.add('row-map-highlight');
-        const me = e.originalEvent;
-        if (me) this._showPhoto(h, me.clientX, me.clientY);
-      });
-      marker.on('mouseout', () => {
-        marker.setRadius(5);
-        marker.setStyle({ fillOpacity: 0.6 });
-        const row = Array.from(document.querySelectorAll('.clickable-row'))
-          .find(r => r.dataset.addr === h.address);
-        if (row) row.classList.remove('row-map-highlight');
-        this._hidePhoto();
-      });
-
-      if (h.address) this._markersByAddr[h.address] = marker;
-      this._markersLayer.addLayer(marker);
+    this._markersByAddr = MapUtils.renderMarkers({
+      layer: this._markersLayer, data: homes,
+      rowSelector: '#results-table-wrap .clickable-row',
+      showPhoto: (h, x, y) => this._showPhoto(h, x, y),
+      hidePhoto: () => this._hidePhoto(),
     });
   },
 
@@ -293,19 +265,11 @@ const PropertyExplorer = {
   _clearFilters(focusAreas) {
     this._selectedAreas = new Set();
     document.querySelectorAll('#pe-area-options input[type="checkbox"]').forEach(cb => cb.checked = false);
-    this._updateAreaTrigger(focusAreas);
-    document.getElementById('filter-beds-min').value = '';
-    document.getElementById('filter-beds-max').value = '';
-    document.getElementById('filter-baths-min').value = '';
-    document.getElementById('filter-baths-max').value = '';
-    document.getElementById('filter-sqft-min').value = '';
-    document.getElementById('filter-sqft-max').value = '';
-    document.getElementById('filter-price-min').value = '';
-    document.getElementById('filter-price-max').value = '';
-    document.getElementById('filter-hoa').value = '';
-    document.getElementById('filter-year-min').value = '';
-    document.getElementById('filter-year-max').value = '';
-    document.getElementById('filter-type').value = '';
+    this._updateAreaTrigger();
+    ['filter-beds-min','filter-beds-max','filter-baths-min','filter-baths-max',
+     'filter-sqft-min','filter-sqft-max','filter-price-min','filter-price-max',
+     'filter-hoa','filter-year-min','filter-year-max','filter-type',
+    ].forEach(id => document.getElementById(id).value = '');
     this._customPolygon = null;
     this._disableDraw();
     this._areaPolygonsLayer.clearLayers();
@@ -315,95 +279,32 @@ const PropertyExplorer = {
   _applyFilters(focusAreas) {
     const f = this._getFilters();
     Prefs.set('pe', f);
-    let homes = [...this._allHomes];
-
-    // Area filter
-    if (f.areas.includes('custom') && this._customPolygon) {
-      homes = Utils.filterByArea(homes, { polygon: this._customPolygon });
-    } else if (f.areas.length > 0 && !f.areas.includes('custom')) {
-      const matched = new Set();
-      f.areas.forEach(areaName => {
-        const areaConfig = focusAreas.find(fa => fa.name === areaName);
-        if (areaConfig) Utils.filterByArea(homes, areaConfig).forEach(h => matched.add(h));
-      });
-      homes = homes.filter(h => matched.has(h));
-    }
-
-    // Numeric filters
-    if (f.bedsMin) homes = homes.filter(h => h.beds != null && h.beds >= Number(f.bedsMin));
-    if (f.bedsMax) homes = homes.filter(h => h.beds != null && h.beds <= Number(f.bedsMax));
-    if (f.bathsMin) homes = homes.filter(h => h.baths != null && h.baths >= Number(f.bathsMin));
-    if (f.bathsMax) homes = homes.filter(h => h.baths != null && h.baths <= Number(f.bathsMax));
-    if (f.sqftMin) homes = homes.filter(h => h.sqft && h.sqft >= Number(f.sqftMin));
-    if (f.sqftMax) homes = homes.filter(h => h.sqft && h.sqft <= Number(f.sqftMax));
-    if (f.priceMin) homes = homes.filter(h => h.sale_price && h.sale_price >= Number(f.priceMin));
-    if (f.priceMax) homes = homes.filter(h => h.sale_price && h.sale_price <= Number(f.priceMax));
-    if (f.hoa === 'none') homes = homes.filter(h => !h.hoa_monthly);
-    if (f.hoa === 'has') homes = homes.filter(h => h.hoa_monthly && h.hoa_monthly > 0);
-    if (f.yearMin) homes = homes.filter(h => h.year_built != null && h.year_built >= Number(f.yearMin));
-    if (f.yearMax) homes = homes.filter(h => h.year_built != null && h.year_built <= Number(f.yearMax));
-    if (f.type) homes = homes.filter(h => h.property_type === f.type);
+    let homes = MapUtils.applyAreaFilter([...this._allHomes], f.areas, this._customPolygon, focusAreas);
+    homes = MapUtils.applyCommonFilters(homes, f, 'sale_price');
 
     this._filteredHomes = homes;
     this._renderMarkers(homes);
 
     const namedAreas = f.areas.filter(a => a !== 'custom');
     if (namedAreas.length > 0) {
-      this._showAreaPolygons(namedAreas, focusAreas, homes);
+      MapUtils.showAreaPolygons(this._map, this._areaPolygonsLayer, namedAreas, focusAreas, homes);
     }
-
     this._renderResults(homes);
   },
 
   _renderResults(homes) {
-    // Summary stats
     const prices = homes.map(h => h.sale_price).filter(v => v != null);
     const sqfts = homes.map(h => h.sqft).filter(v => v != null);
-    const medianPrice = Utils.median(prices);
-    const medianSqft = Utils.median(sqfts);
-    const medianPpsf = Utils.median(homes.map(h => h.price_per_sqft).filter(v => v != null));
-
     document.getElementById('results-summary').innerHTML = `
       <span><strong>${homes.length}</strong> properties</span>
-      <span>Median: <strong>${Utils.formatCurrency(medianPrice)}</strong></span>
-      <span>Median SqFt: <strong>${Utils.formatNumber(medianSqft)}</strong></span>
-      <span>Median $/SqFt: <strong>${Utils.formatCurrency(medianPpsf)}</strong></span>
+      <span>Median: <strong>${Utils.formatCurrency(Utils.median(prices))}</strong></span>
+      <span>Median SqFt: <strong>${Utils.formatNumber(Utils.median(sqfts))}</strong></span>
+      <span>Median $/SqFt: <strong>${Utils.formatCurrency(Utils.median(homes.map(h => h.price_per_sqft).filter(v => v != null)))}</strong></span>
     `;
 
-    // Sort
-    homes.sort((a, b) => {
-      const va = a[this._sortCol], vb = b[this._sortCol];
-      if (va == null && vb == null) return 0;
-      if (va == null) return 1;
-      if (vb == null) return -1;
-      return this._sortAsc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
-    });
-
-    // Table (limit to 200 rows for performance)
+    MapUtils.sortData(homes, this._sort.col, this._sort.asc);
     const display = homes.slice(0, 200);
-    const sortIcon = (col) =>
-      this._sortCol === col ? (this._sortAsc ? ' ▲' : ' ▼') : '';
-
-    const headers = [
-      { col: 'sold_date', label: 'Sold' },
-      { col: 'address', label: 'Address' },
-      { col: 'city', label: 'City' },
-      { col: 'neighborhood', label: 'Neighborhood' },
-      { col: 'sale_price', label: 'Price' },
-      { col: null, label: '\u0394 Assessed', sortable: false },
-      { col: 'hoa_monthly', label: 'HOA/mo' },
-      { col: 'price_per_sqft', label: '$/SqFt' },
-      { col: 'sqft', label: 'SqFt' },
-      { col: 'beds', label: 'Bd' },
-      { col: 'baths', label: 'Ba' },
-      { col: 'year_built', label: 'Year' },
-    ];
-
-    const headerHtml = headers.map(h =>
-      h.sortable === false
-        ? `<th>${h.label}</th>`
-        : `<th class="sortable" data-col="${h.col}">${h.label}${sortIcon(h.col)}</th>`
-    ).join('');
+    const headerHtml = MapUtils.renderHeaders(this._headers, this._sort.col, this._sort.asc);
 
     const rowsHtml = display.map(h => `
       <tr class="clickable-row" data-addr="${(h.address || '').replace(/"/g, '&quot;')}">
@@ -429,50 +330,23 @@ const PropertyExplorer = {
     `).join('');
 
     document.getElementById('results-table-wrap').innerHTML = `
-      <table class="data-table">
-        <thead><tr>${headerHtml}</tr></thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
+      <table class="data-table"><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table>
       ${homes.length > 200 ? `<p class="table-note">Showing 200 of ${homes.length} results</p>` : ''}
     `;
 
-    // Sortable headers
-    document.querySelectorAll('.sortable').forEach(th => {
-      th.addEventListener('click', () => {
-        const col = th.dataset.col;
-        if (this._sortCol === col) {
-          this._sortAsc = !this._sortAsc;
-        } else {
-          this._sortCol = col;
-          this._sortAsc = col === 'address' || col === 'sold_date';
-        }
-        this._renderResults(this._filteredHomes);
-      });
-    });
+    MapUtils.bindSortHeaders('#results-table-wrap .sortable', this._sort, ['address', 'sold_date'],
+      () => this._renderResults(this._filteredHomes));
 
-    // Row hover -> swell map marker; row click -> show comps
-    document.querySelectorAll('.clickable-row').forEach(tr => {
-      const addr = tr.dataset.addr;
-      tr.addEventListener('mouseenter', (e) => {
-        const marker = this._markersByAddr[addr];
-        if (marker) { marker.setRadius(9); marker.setStyle({ fillOpacity: 0.95 }); marker.bringToFront(); }
-        const home = homes.find(h => h.address === addr);
-        if (home) this._showPhoto(home, e.clientX, e.clientY);
-      });
-      tr.addEventListener('mouseleave', () => {
-        const marker = this._markersByAddr[addr];
-        if (marker) { marker.setRadius(5); marker.setStyle({ fillOpacity: 0.6 }); }
-        this._hidePhoto();
-      });
-      tr.addEventListener('click', () => {
-        const home = homes.find(h => h.address === addr);
-        if (home) this._showComps(home);
-      });
+    MapUtils.bindTableMarkerHovers({
+      rows: '#results-table-wrap .clickable-row', items: homes,
+      markersByAddr: this._markersByAddr,
+      showPhoto: (h, x, y) => this._showPhoto(h, x, y),
+      hidePhoto: () => this._hidePhoto(),
+      onRowClick: (h) => this._showComps(h),
     });
   },
 
   _showComps(home) {
-    // Find comparable sales: same zip, similar beds (±1), similar sqft (±25%)
     const sqft = home.sqft || 0;
     const beds = home.beds || 0;
     const comps = this._allHomes.filter(h =>
@@ -483,16 +357,11 @@ const PropertyExplorer = {
       h.sale_price != null
     );
 
-    const compPrices = comps.map(h => h.sale_price);
-    const medianComp = Utils.median(compPrices);
-
+    const medianComp = Utils.median(comps.map(h => h.sale_price));
     const assessedDiff = home.total_assessed && home.sale_price
-      ? ((home.sale_price - home.total_assessed) / home.total_assessed * 100).toFixed(1)
-      : null;
-
+      ? ((home.sale_price - home.total_assessed) / home.total_assessed * 100).toFixed(1) : null;
     const compDiff = medianComp && home.sale_price
-      ? ((home.sale_price - medianComp) / medianComp * 100).toFixed(1)
-      : null;
+      ? ((home.sale_price - medianComp) / medianComp * 100).toFixed(1) : null;
 
     document.getElementById('comp-hover-content').innerHTML = `
       <h3>Comparable Sales Analysis</h3>
@@ -524,36 +393,32 @@ const PropertyExplorer = {
       </div>
       <div id="comp-hover-map" class="comp-map"></div>
       ${comps.length > 0 ? `
-        <table class="data-table comp-table">
-          <thead><tr>
-            <th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
-          </tr></thead>
-          <tbody>
-            ${comps.slice(0, 15).map(c => `
-              <tr>
-                <td>${Utils.formatDate(c.sold_date)}</td>
-                <td><a href="${this._zillowUrl(c)}" target="_blank" rel="noopener">${c.address}</a></td>
-                <td>${Utils.formatCurrency(c.sale_price)}</td>
-                <td>${Utils.formatCurrency(c.price_per_sqft)}</td>
-                <td>${Utils.formatNumber(c.sqft)}</td>
-                <td>${c.beds}/${c.baths}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+        <table class="data-table comp-table"><thead><tr>
+          <th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
+        </tr></thead><tbody>
+          ${comps.slice(0, 15).map(c => `<tr>
+            <td>${Utils.formatDate(c.sold_date)}</td>
+            <td><a href="${this._zillowUrl(c)}" target="_blank" rel="noopener">${c.address}</a></td>
+            <td>${Utils.formatCurrency(c.sale_price)}</td>
+            <td>${Utils.formatCurrency(c.price_per_sqft)}</td>
+            <td>${Utils.formatNumber(c.sqft)}</td>
+            <td>${c.beds}/${c.baths}</td>
+          </tr>`).join('')}
+        </tbody></table>
       ` : '<p class="empty-state">No comparable sales found in the same zip code with similar specs.</p>'}
     `;
 
     document.getElementById('comp-hover-card').style.display = 'block';
     document.getElementById('comp-hover-backdrop').style.display = 'block';
     this._initCompMap(home, comps);
-    MapUtils.initCompTableHovers(
-      comps.slice(0, 15),
-      document.getElementById('comp-hover-content'),
-      this._compMarkersByAddr,
-      (h, x, y) => this._showPhoto(h, x, y),
-      () => this._hidePhoto()
-    );
+
+    MapUtils.bindTableMarkerHovers({
+      rows: document.querySelectorAll('#comp-hover-content .comp-table tbody tr'),
+      items: comps.slice(0, 15), markersByAddr: this._compMarkersByAddr,
+      showPhoto: (h, x, y) => this._showPhoto(h, x, y),
+      hidePhoto: () => this._hidePhoto(),
+      defaultOpacity: 0.7,
+    });
   },
 
   _hideComps() {
@@ -565,7 +430,6 @@ const PropertyExplorer = {
   _initCompMap(home, comps) {
     if (this._compMap) { this._compMap.remove(); this._compMap = null; }
     this._compMarkersByAddr = {};
-
     const result = MapUtils.createCompMap('comp-hover-map', home, comps, {
       subjectLabel: 'subject',
       onCompHover: (c, e, isOver) => {
@@ -574,53 +438,13 @@ const PropertyExplorer = {
         if (!isOver) this._hidePhoto();
       },
     });
-
-    if (result) {
-      this._compMap = result.map;
-      this._compMarkersByAddr = result.markersByAddr;
-    }
+    if (result) { this._compMap = result.map; this._compMarkersByAddr = result.markersByAddr; }
   },
 
-  _showPhoto(home, x, y) {
-    MapUtils.showPhoto(this._photoTooltip, this._photoTimeout, home, x, y, 'sale_price');
-  },
-
-  _hidePhoto() {
-    MapUtils.hidePhoto(this._photoTooltip, this._photoTimeout);
-  },
-
-  _initAreaMultiSelect(focusAreas) {
-    MapUtils.initAreaMultiSelect({
-      optionsElId: 'pe-area-options',
-      dropdownElId: 'pe-area-dropdown',
-      triggerElId: 'pe-area-trigger',
-      selectElId: 'pe-area-select',
-      focusAreas,
-      selectedAreas: this._selectedAreas,
-      onChanged: () => {
-        this._updateAreaTrigger(focusAreas);
-        this._applyFilters(focusAreas);
-      },
-      enableDraw: () => this._enableDraw(),
-      disableDraw: () => {
-        this._disableDraw();
-        this._customPolygon = null;
-      },
-    });
-    this._updateAreaTrigger(focusAreas);
-  },
-
-  _updateAreaTrigger(focusAreas) {
-    MapUtils.updateAreaTrigger('#pe-area-trigger', this._selectedAreas, focusAreas);
-  },
+  _showPhoto(home, x, y) { MapUtils.showPhoto(this._photoTooltip, this._photoTimeout, home, x, y, 'sale_price'); },
+  _hidePhoto() { MapUtils.hidePhoto(this._photoTooltip, this._photoTimeout); },
 
   _zillowUrl(h) {
-    const parts = [h.address, h.city, 'NC', h.zip_code]
-      .filter(Boolean)
-      .join(' ')
-      .replace(/[^a-zA-Z0-9\s]/g, '')
-      .trim()
-      .replace(/\s+/g, '-');
-    return `https://www.zillow.com/homes/${parts}_rb/`;
+    return `https://www.zillow.com/homes/${[h.address, h.city, 'NC', h.zip_code].filter(Boolean).join(' ').replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '-')}_rb/`;
   },
 };
