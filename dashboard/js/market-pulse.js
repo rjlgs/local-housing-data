@@ -26,7 +26,7 @@ const MarketPulse = {
         <div class="tab-title-row">
           <h2>Market Pulse</h2>
           <button id="mp-learn-more" class="btn-learn-more">Learn More</button>
-          ${data.data_freshness && data.data_freshness.market_trends ? `<span class="freshness-badge">Trend data updated ${this._formatAge(data.data_freshness.market_trends)}</span>` : ''}
+          ${data.data_freshness && data.data_freshness.market_trends ? `<span class="freshness-badge">Trend data updated ${MapUtils.formatAge(data.data_freshness.market_trends)}</span>` : ''}
         </div>
         <p class="subtitle">Is now a good time to buy? Track key market indicators over time.</p>
       </div>
@@ -132,18 +132,6 @@ const MarketPulse = {
     this._renderBuyerScore(trends, allAreas);
   },
 
-  _formatAge(isoString) {
-    try {
-      const then = new Date(isoString);
-      const now = new Date();
-      const hours = Math.floor((now - then) / 3600000);
-      if (hours < 1) return 'just now';
-      if (hours < 24) return `${hours}h ago`;
-      const days = Math.floor(hours / 24);
-      return `${days}d ago`;
-    } catch { return 'unknown'; }
-  },
-
   _buildAreaList(zipAreas, trends) {
     const areas = [];
     let colorIdx = 0;
@@ -220,7 +208,7 @@ const MarketPulse = {
         zoomControl: true,
         attributionControl: false,
       });
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      L.tileLayer(MapUtils.TILE_URL, {
         maxZoom: 13,
       }).addTo(map);
 

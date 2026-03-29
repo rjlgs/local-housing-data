@@ -17,7 +17,7 @@ const PropertyExplorer = {
   _selectedAreas: new Set(), // names of selected focus areas (empty = all)
   _markersByAddr: {}, // address -> Leaflet marker, for bidirectional hover
   _photoTooltip: null,
-  _photoTimeout: null,
+  _photoTimeout: { id: null },
   _compMap: null,
   _compMarkersByAddr: {},
 
@@ -33,7 +33,7 @@ const PropertyExplorer = {
           <button id="pe-learn-more" class="btn-learn-more">Learn More</button>
         </div>
         <p class="subtitle">Search recent sales. Filter by area, size, and price. Draw a polygon on the map to define a custom area.</p>
-        ${data.data_freshness && data.data_freshness.sold_homes ? `<span class="freshness-badge">Sold data updated ${this._formatAge(data.data_freshness.sold_homes)}</span>` : ''}
+        ${data.data_freshness && data.data_freshness.sold_homes ? `<span class="freshness-badge">Sold data updated ${MapUtils.formatAge(data.data_freshness.sold_homes)}</span>` : ''}
       </div>
       <div id="pe-modal" class="modal-overlay" style="display:none">
         <div class="modal-content">
@@ -187,7 +187,7 @@ const PropertyExplorer = {
     });
 
     this._initMap();
-    this._initPhotoTooltip();
+    this._photoTooltip = MapUtils.createPhotoTooltip();
     this._initAreaMultiSelect(focusAreas);
 
     // Initial render with saved or default filters
@@ -195,120 +195,44 @@ const PropertyExplorer = {
   },
 
   _initMap() {
-    // Compute center from all homes
-    const lats = this._allHomes.map(h => h.latitude);
-    const lngs = this._allHomes.map(h => h.longitude);
-    const centerLat = lats.reduce((a, b) => a + b, 0) / lats.length;
-    const centerLng = lngs.reduce((a, b) => a + b, 0) / lngs.length;
-
-    this._map = L.map('explorer-map').setView([centerLat, centerLng], 11);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19,
-    }).addTo(this._map);
-
-    // Layer for area polygon outlines
+    this._map = MapUtils.createMap('explorer-map', this._allHomes);
     this._areaPolygonsLayer = L.featureGroup().addTo(this._map);
-
-    // Layer for drawn items (user polygons)
     this._drawnItems = L.featureGroup().addTo(this._map);
-
-    // Markers layer
     this._markersLayer = L.layerGroup().addTo(this._map);
+    this._drawControl = MapUtils.createDrawControl(this._drawnItems);
 
-    // Draw control (hidden by default)
-    this._drawControl = new L.Control.Draw({
-      draw: {
-        polygon: {
-          allowIntersection: false,
-          shapeOptions: { color: '#2563eb', weight: 2, fillOpacity: 0.1 },
-        },
-        polyline: false,
-        rectangle: {
-          shapeOptions: { color: '#2563eb', weight: 2, fillOpacity: 0.1 },
-        },
-        circle: false,
-        circlemarker: false,
-        marker: false,
-      },
-      edit: {
-        featureGroup: this._drawnItems,
-        remove: true,
-      },
-    });
-
-    // Handle polygon creation
-    this._map.on(L.Draw.Event.CREATED, (e) => {
-      this._drawnItems.clearLayers();
-      this._drawnItems.addLayer(e.layer);
-      this._customPolygon = e.layer.getLatLngs()[0].map(ll => [ll.lat, ll.lng]);
-      this._applyFilters(this._focusAreas);
-    });
-
-    // Handle polygon deletion
-    this._map.on(L.Draw.Event.DELETED, () => {
-      this._customPolygon = null;
-      this._selectedAreas.delete('custom');
-      const customCb = document.querySelector('#pe-area-options [data-key="custom"] input');
-      if (customCb) customCb.checked = false;
-      this._updateAreaTrigger(this._focusAreas);
-      this._applyFilters(this._focusAreas);
-    });
-
-    // Handle polygon edit
-    this._map.on(L.Draw.Event.EDITED, () => {
-      const layers = this._drawnItems.getLayers();
-      if (layers.length > 0) {
-        this._customPolygon = layers[0].getLatLngs()[0].map(ll => [ll.lat, ll.lng]);
+    MapUtils.bindDrawEvents(this._map, this._drawnItems, {
+      onCreated: (polygon) => {
+        this._customPolygon = polygon;
         this._applyFilters(this._focusAreas);
-      }
+      },
+      onDeleted: () => {
+        this._customPolygon = null;
+        this._selectedAreas.delete('custom');
+        const customCb = document.querySelector('#pe-area-options [data-key="custom"] input');
+        if (customCb) customCb.checked = false;
+        this._updateAreaTrigger(this._focusAreas);
+        this._applyFilters(this._focusAreas);
+      },
+      onEdited: (polygon) => {
+        this._customPolygon = polygon;
+        this._applyFilters(this._focusAreas);
+      },
     });
 
     this._renderMarkers(this._allHomes);
   },
 
   _enableDraw() {
-    if (!this._map.hasLayer(this._drawControl)) {
-      this._map.addControl(this._drawControl);
-    }
+    MapUtils.enableDraw(this._map, this._drawControl);
   },
 
   _disableDraw() {
-    if (this._drawControl._map) {
-      this._map.removeControl(this._drawControl);
-    }
-    this._drawnItems.clearLayers();
+    MapUtils.disableDraw(this._map, this._drawControl, this._drawnItems);
   },
 
   _showAreaPolygons(areaNames, focusAreas, filteredHomes) {
-    this._areaPolygonsLayer.clearLayers();
-    if (!areaNames.length) return;
-
-    areaNames.forEach(name => {
-      const fa = focusAreas.find(a => a.name === name);
-      if (fa && fa.polygon && fa.polygon.length >= 3) {
-        this._areaPolygonsLayer.addLayer(L.polygon(fa.polygon, {
-          color: '#2563eb', weight: 2, fillOpacity: 0.08, dashArray: '6 4', interactive: false,
-        }));
-      }
-    });
-
-    if (this._areaPolygonsLayer.getLayers().length > 0) {
-      this._map.fitBounds(this._areaPolygonsLayer.getBounds(), { padding: [40, 40] });
-    } else if (filteredHomes) {
-      // No defined polygons — derive bounding box from filtered homes
-      const pts = filteredHomes.filter(h => h.latitude != null && h.longitude != null);
-      if (pts.length < 2) return;
-      const lats = pts.map(h => h.latitude);
-      const lngs = pts.map(h => h.longitude);
-      const pad = 0.005;
-      const rect = L.rectangle([
-        [Math.min(...lats) - pad, Math.min(...lngs) - pad],
-        [Math.max(...lats) + pad, Math.max(...lngs) + pad],
-      ], { color: '#2563eb', weight: 2, fillOpacity: 0.08, dashArray: '6 4', interactive: false });
-      this._areaPolygonsLayer.addLayer(rect);
-      this._map.fitBounds(rect.getBounds(), { padding: [40, 40] });
-    }
+    MapUtils.showAreaPolygons(this._map, this._areaPolygonsLayer, areaNames, focusAreas, filteredHomes);
   },
 
   _renderMarkers(homes) {
@@ -623,7 +547,13 @@ const PropertyExplorer = {
     document.getElementById('comp-hover-card').style.display = 'block';
     document.getElementById('comp-hover-backdrop').style.display = 'block';
     this._initCompMap(home, comps);
-    this._initCompTableHovers(comps.slice(0, 15), document.getElementById('comp-hover-content'));
+    MapUtils.initCompTableHovers(
+      comps.slice(0, 15),
+      document.getElementById('comp-hover-content'),
+      this._compMarkersByAddr,
+      (h, x, y) => this._showPhoto(h, x, y),
+      () => this._hidePhoto()
+    );
   },
 
   _hideComps() {
@@ -632,228 +562,56 @@ const PropertyExplorer = {
     if (this._compMap) { this._compMap.remove(); this._compMap = null; }
   },
 
-  _initCompTableHovers(comps, contentEl) {
-    contentEl.querySelectorAll('.comp-table tbody tr').forEach((row, i) => {
-      const comp = comps[i];
-      if (!comp) return;
-      row.addEventListener('mouseenter', (e) => {
-        this._showPhoto(comp, e.clientX, e.clientY);
-        const m = this._compMarkersByAddr[comp.address];
-        if (m) { m.setRadius(9); m.setStyle({ fillOpacity: 0.95 }); m.bringToFront(); }
-      });
-      row.addEventListener('mouseleave', () => {
-        this._hidePhoto();
-        const m = this._compMarkersByAddr[comp.address];
-        if (m) { m.setRadius(5); m.setStyle({ fillOpacity: 0.7 }); }
-      });
-    });
-  },
-
   _initCompMap(home, comps) {
     if (this._compMap) { this._compMap.remove(); this._compMap = null; }
     this._compMarkersByAddr = {};
-    const mapEl = document.getElementById('comp-hover-map');
-    if (!mapEl) return;
 
-    const compPts = comps.filter(c => c.latitude != null && c.longitude != null);
-    const hasSubject = home.latitude != null && home.longitude != null;
-
-    if (!hasSubject && compPts.length === 0) {
-      mapEl.style.display = 'none';
-      return;
-    }
-
-    const map = L.map(mapEl, { zoomControl: true, scrollWheelZoom: false });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19,
-    }).addTo(map);
-
-    // Comp markers — blue
-    compPts.forEach(c => {
-      const m = L.circleMarker([c.latitude, c.longitude], {
-        radius: 5, fillColor: '#2563eb', color: '#1d4ed8', weight: 1, fillOpacity: 0.7,
-      }).addTo(map);
-      m.on('mouseover', (e) => {
-        m.setRadius(8); m.setStyle({ fillOpacity: 0.95 }); m.bringToFront();
+    const result = MapUtils.createCompMap('comp-hover-map', home, comps, {
+      subjectLabel: 'subject',
+      onCompHover: (c, e, isOver) => {
         const me = e.originalEvent;
-        if (me) this._showPhoto(c, me.clientX, me.clientY);
-      });
-      m.on('mouseout', () => { m.setRadius(5); m.setStyle({ fillOpacity: 0.7 }); this._hidePhoto(); });
-      if (c.address) this._compMarkersByAddr[c.address] = m;
+        if (isOver && me) this._showPhoto(c, me.clientX, me.clientY);
+        if (!isOver) this._hidePhoto();
+      },
     });
 
-    // Subject marker — red, slightly larger
-    if (hasSubject) {
-      L.circleMarker([home.latitude, home.longitude], {
-        radius: 8, fillColor: '#ef4444', color: '#dc2626', weight: 2, fillOpacity: 0.9,
-      }).bindTooltip(`${home.address || ''} (subject)`, { permanent: false }).addTo(map);
+    if (result) {
+      this._compMap = result.map;
+      this._compMarkersByAddr = result.markersByAddr;
     }
-
-    // Fit bounds to all points
-    const allPts = [
-      ...(hasSubject ? [[home.latitude, home.longitude]] : []),
-      ...compPts.map(c => [c.latitude, c.longitude]),
-    ];
-    if (allPts.length === 1) {
-      map.setView(allPts[0], 14);
-    } else {
-      map.fitBounds(L.latLngBounds(allPts), { padding: [24, 24] });
-    }
-
-    this._compMap = map;
-  },
-
-  _initPhotoTooltip() {
-    const el = document.createElement('div');
-    el.className = 'photo-tooltip';
-    el.innerHTML = `<img class="photo-tooltip-img" src="" alt="">
-      <div class="photo-tooltip-body">
-        <div class="photo-tooltip-address"></div>
-        <div class="photo-tooltip-price"></div>
-        <div class="photo-tooltip-specs"></div>
-        <div class="photo-tooltip-location"></div>
-      </div>`;
-    el.style.display = 'none';
-    document.body.appendChild(el);
-    this._photoTooltip = el;
   },
 
   _showPhoto(home, x, y) {
-    clearTimeout(this._photoTimeout);
-    if (!home.photo_url) return;
-    this._photoTimeout = setTimeout(() => {
-      const tip = this._photoTooltip;
-      tip.querySelector('.photo-tooltip-img').src = home.photo_url;
-      tip.querySelector('.photo-tooltip-address').textContent = home.address || '';
-      tip.querySelector('.photo-tooltip-price').textContent = Utils.formatCurrency(home.sale_price || home.list_price);
-      const specs = [
-        home.beds != null ? `${home.beds}bd` : null,
-        home.baths != null ? `${home.baths}ba` : null,
-        home.sqft ? `${Utils.formatNumber(home.sqft)} sqft` : null,
-      ].filter(Boolean).join(' · ');
-      tip.querySelector('.photo-tooltip-specs').textContent = specs;
-      tip.querySelector('.photo-tooltip-location').textContent =
-        [home.neighborhood, home.city, home.zip_code].filter(Boolean).join(' ');
-      const tw = 340, th = 300;
-      let left = x + 16, top = y - th / 2;
-      if (left + tw > window.innerWidth - 10) left = x - tw - 16;
-      if (top < 10) top = 10;
-      if (top + th > window.innerHeight - 10) top = window.innerHeight - th - 10;
-      tip.style.left = left + 'px';
-      tip.style.top = top + 'px';
-      tip.style.display = 'block';
-    }, 300);
+    MapUtils.showPhoto(this._photoTooltip, this._photoTimeout, home, x, y, 'sale_price');
   },
 
   _hidePhoto() {
-    clearTimeout(this._photoTimeout);
-    if (this._photoTooltip) this._photoTooltip.style.display = 'none';
+    MapUtils.hidePhoto(this._photoTooltip, this._photoTimeout);
   },
 
   _initAreaMultiSelect(focusAreas) {
-    const options = document.getElementById('pe-area-options');
-    const dropdown = document.getElementById('pe-area-dropdown');
-    const trigger = document.getElementById('pe-area-trigger');
-
-    focusAreas.forEach(fa => {
-      const label = document.createElement('label');
-      label.className = 'multiselect-option';
-      label.dataset.key = fa.name;
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.value = fa.name;
-      cb.checked = this._selectedAreas.has(fa.name);
-      const text = document.createElement('span');
-      text.textContent = fa.name;
-      label.append(cb, text);
-      options.appendChild(label);
-
-      cb.addEventListener('change', () => {
-        if (cb.checked) {
-          if (this._selectedAreas.has('custom')) {
-            this._selectedAreas.delete('custom');
-            const customCb = options.querySelector('[data-key="custom"] input');
-            if (customCb) customCb.checked = false;
-            this._disableDraw();
-            this._customPolygon = null;
-          }
-          this._selectedAreas.add(fa.name);
-        } else {
-          this._selectedAreas.delete(fa.name);
-        }
+    MapUtils.initAreaMultiSelect({
+      optionsElId: 'pe-area-options',
+      dropdownElId: 'pe-area-dropdown',
+      triggerElId: 'pe-area-trigger',
+      selectElId: 'pe-area-select',
+      focusAreas,
+      selectedAreas: this._selectedAreas,
+      onChanged: () => {
         this._updateAreaTrigger(focusAreas);
         this._applyFilters(focusAreas);
-      });
-    });
-
-    // Custom draw option
-    const customLabel = document.createElement('label');
-    customLabel.className = 'multiselect-option';
-    customLabel.dataset.key = 'custom';
-    const customCb = document.createElement('input');
-    customCb.type = 'checkbox';
-    customCb.value = 'custom';
-    customCb.checked = this._selectedAreas.has('custom');
-    const customText = document.createElement('span');
-    customText.textContent = 'Custom (Draw on Map)';
-    customLabel.append(customCb, customText);
-    options.appendChild(customLabel);
-
-    customCb.addEventListener('change', () => {
-      if (customCb.checked) {
-        this._selectedAreas.forEach(name => { if (name !== 'custom') this._selectedAreas.delete(name); });
-        options.querySelectorAll('input[type="checkbox"]').forEach(c => { if (c !== customCb) c.checked = false; });
-        this._selectedAreas.add('custom');
-        this._enableDraw();
-      } else {
-        this._selectedAreas.delete('custom');
+      },
+      enableDraw: () => this._enableDraw(),
+      disableDraw: () => {
         this._disableDraw();
         this._customPolygon = null;
-      }
-      this._updateAreaTrigger(focusAreas);
-      this._applyFilters(focusAreas);
+      },
     });
-
-    trigger.addEventListener('click', (e) => {
-      e.stopPropagation();
-      dropdown.classList.toggle('open');
-    });
-
-    document.addEventListener('click', (e) => {
-      if (!e.target.closest('#pe-area-select')) dropdown.classList.remove('open');
-    });
-
-    if (this._selectedAreas.has('custom')) this._enableDraw();
     this._updateAreaTrigger(focusAreas);
   },
 
   _updateAreaTrigger(focusAreas) {
-    const label = document.querySelector('#pe-area-trigger .multiselect-label');
-    if (!label) return;
-    const hasCustom = this._selectedAreas.has('custom');
-    const namedAreas = [...this._selectedAreas].filter(a => a !== 'custom');
-    if (hasCustom) {
-      label.textContent = 'Custom area';
-    } else if (namedAreas.length === 0 || namedAreas.length === focusAreas.length) {
-      label.textContent = 'All Areas';
-    } else if (namedAreas.length === 1) {
-      label.textContent = namedAreas[0];
-    } else {
-      label.textContent = `${namedAreas.length} areas`;
-    }
-  },
-
-  _formatAge(isoString) {
-    try {
-      const then = new Date(isoString);
-      const now = new Date();
-      const hours = Math.floor((now - then) / 3600000);
-      if (hours < 1) return 'just now';
-      if (hours < 24) return `${hours}h ago`;
-      const days = Math.floor(hours / 24);
-      return `${days}d ago`;
-    } catch { return 'unknown'; }
+    MapUtils.updateAreaTrigger('#pe-area-trigger', this._selectedAreas, focusAreas);
   },
 
   _zillowUrl(h) {

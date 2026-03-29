@@ -195,6 +195,309 @@ const Utils = {
   },
 };
 
+// --- Shared map utilities ---
+
+const MapUtils = {
+  TILE_URL: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  TILE_ATTR: '&copy; OpenStreetMap contributors',
+
+  createMap(elementId, dataPoints, defaultCenter) {
+    const pts = (dataPoints || []).filter(h => h.latitude != null && h.longitude != null);
+    let center = defaultCenter || [36.07, -79.79];
+    if (pts.length > 0) {
+      center = [
+        pts.reduce((s, h) => s + h.latitude, 0) / pts.length,
+        pts.reduce((s, h) => s + h.longitude, 0) / pts.length,
+      ];
+    }
+    const map = L.map(elementId).setView(center, 11);
+    L.tileLayer(this.TILE_URL, { attribution: this.TILE_ATTR, maxZoom: 19 }).addTo(map);
+    return map;
+  },
+
+  createDrawControl(drawnItems) {
+    return new L.Control.Draw({
+      draw: {
+        polygon: { allowIntersection: false, shapeOptions: { color: '#2563eb', weight: 2, fillOpacity: 0.1 } },
+        polyline: false,
+        rectangle: { shapeOptions: { color: '#2563eb', weight: 2, fillOpacity: 0.1 } },
+        circle: false, circlemarker: false, marker: false,
+      },
+      edit: { featureGroup: drawnItems, remove: true },
+    });
+  },
+
+  bindDrawEvents(map, drawnItems, callbacks) {
+    map.on(L.Draw.Event.CREATED, (e) => {
+      drawnItems.clearLayers();
+      drawnItems.addLayer(e.layer);
+      const polygon = e.layer.getLatLngs()[0].map(ll => [ll.lat, ll.lng]);
+      callbacks.onCreated(polygon);
+    });
+    map.on(L.Draw.Event.DELETED, () => callbacks.onDeleted());
+    map.on(L.Draw.Event.EDITED, () => {
+      const layers = drawnItems.getLayers();
+      if (layers.length > 0) {
+        const polygon = layers[0].getLatLngs()[0].map(ll => [ll.lat, ll.lng]);
+        callbacks.onEdited(polygon);
+      }
+    });
+  },
+
+  enableDraw(map, drawControl) {
+    if (!map.hasLayer(drawControl)) map.addControl(drawControl);
+  },
+
+  disableDraw(map, drawControl, drawnItems) {
+    if (drawControl._map) map.removeControl(drawControl);
+    drawnItems.clearLayers();
+  },
+
+  showAreaPolygons(map, layer, areaNames, focusAreas, filteredItems) {
+    layer.clearLayers();
+    if (!areaNames.length) return;
+
+    areaNames.forEach(name => {
+      const fa = focusAreas.find(a => a.name === name);
+      if (fa && fa.polygon && fa.polygon.length >= 3) {
+        layer.addLayer(L.polygon(fa.polygon, {
+          color: '#2563eb', weight: 2, fillOpacity: 0.08, dashArray: '6 4', interactive: false,
+        }));
+      }
+    });
+
+    if (layer.getLayers().length > 0) {
+      map.fitBounds(layer.getBounds(), { padding: [40, 40] });
+    } else if (filteredItems) {
+      const pts = filteredItems.filter(h => h.latitude != null && h.longitude != null);
+      if (pts.length < 2) return;
+      const lats = pts.map(h => h.latitude);
+      const lngs = pts.map(h => h.longitude);
+      const pad = 0.005;
+      const rect = L.rectangle([
+        [Math.min(...lats) - pad, Math.min(...lngs) - pad],
+        [Math.max(...lats) + pad, Math.max(...lngs) + pad],
+      ], { color: '#2563eb', weight: 2, fillOpacity: 0.08, dashArray: '6 4', interactive: false });
+      layer.addLayer(rect);
+      map.fitBounds(rect.getBounds(), { padding: [40, 40] });
+    }
+  },
+
+  createCompMap(mapElId, subject, comps, opts) {
+    const mapEl = document.getElementById(mapElId);
+    if (!mapEl) return null;
+
+    const compPts = comps.filter(c => c.latitude != null && c.longitude != null);
+    const hasSubject = subject.latitude != null && subject.longitude != null;
+
+    if (!hasSubject && compPts.length === 0) {
+      mapEl.style.display = 'none';
+      return null;
+    }
+
+    const map = L.map(mapEl, { zoomControl: true, scrollWheelZoom: false });
+    L.tileLayer(this.TILE_URL, { attribution: this.TILE_ATTR, maxZoom: 19 }).addTo(map);
+
+    const markersByAddr = {};
+
+    compPts.forEach(c => {
+      const m = L.circleMarker([c.latitude, c.longitude], {
+        radius: 5, fillColor: '#2563eb', color: '#1d4ed8', weight: 1, fillOpacity: 0.7,
+      }).addTo(map);
+      if (opts && opts.onCompHover) {
+        m.on('mouseover', (e) => {
+          m.setRadius(8); m.setStyle({ fillOpacity: 0.95 }); m.bringToFront();
+          opts.onCompHover(c, e, true);
+        });
+        m.on('mouseout', (e) => {
+          m.setRadius(5); m.setStyle({ fillOpacity: 0.7 });
+          opts.onCompHover(c, e, false);
+        });
+      }
+      if (c.address) markersByAddr[c.address] = m;
+    });
+
+    if (hasSubject) {
+      const tooltipLabel = opts && opts.subjectLabel || 'subject';
+      L.circleMarker([subject.latitude, subject.longitude], {
+        radius: 8, fillColor: '#ef4444', color: '#dc2626', weight: 2, fillOpacity: 0.9,
+      }).bindTooltip(`${subject.address || ''} (${tooltipLabel})`, { permanent: false }).addTo(map);
+    }
+
+    const allPts = [
+      ...(hasSubject ? [[subject.latitude, subject.longitude]] : []),
+      ...compPts.map(c => [c.latitude, c.longitude]),
+    ];
+    if (allPts.length === 1) map.setView(allPts[0], 14);
+    else map.fitBounds(L.latLngBounds(allPts), { padding: [24, 24] });
+
+    return { map, markersByAddr };
+  },
+
+  createPhotoTooltip() {
+    const el = document.createElement('div');
+    el.className = 'photo-tooltip';
+    el.innerHTML = `<img class="photo-tooltip-img" src="" alt="">
+      <div class="photo-tooltip-body">
+        <div class="photo-tooltip-address"></div>
+        <div class="photo-tooltip-price"></div>
+        <div class="photo-tooltip-specs"></div>
+        <div class="photo-tooltip-location"></div>
+      </div>`;
+    el.style.display = 'none';
+    document.body.appendChild(el);
+    return el;
+  },
+
+  showPhoto(tooltip, timeoutRef, home, x, y, priceField) {
+    clearTimeout(timeoutRef.id);
+    if (!home.photo_url) return;
+    timeoutRef.id = setTimeout(() => {
+      tooltip.querySelector('.photo-tooltip-img').src = home.photo_url;
+      tooltip.querySelector('.photo-tooltip-address').textContent = home.address || '';
+      tooltip.querySelector('.photo-tooltip-price').textContent = Utils.formatCurrency(home[priceField || 'sale_price'] || home.sale_price || home.list_price);
+      const specs = [
+        home.beds != null ? `${home.beds}bd` : null,
+        home.baths != null ? `${home.baths}ba` : null,
+        home.sqft ? `${Utils.formatNumber(home.sqft)} sqft` : null,
+      ].filter(Boolean).join(' · ');
+      tooltip.querySelector('.photo-tooltip-specs').textContent = specs;
+      tooltip.querySelector('.photo-tooltip-location').textContent =
+        [home.neighborhood, home.city, home.zip_code].filter(Boolean).join(' ');
+      const tw = 340, th = 300;
+      let left = x + 16, top = y - th / 2;
+      if (left + tw > window.innerWidth - 10) left = x - tw - 16;
+      if (top < 10) top = 10;
+      if (top + th > window.innerHeight - 10) top = window.innerHeight - th - 10;
+      tooltip.style.left = left + 'px';
+      tooltip.style.top = top + 'px';
+      tooltip.style.display = 'block';
+    }, 300);
+  },
+
+  hidePhoto(tooltip, timeoutRef) {
+    clearTimeout(timeoutRef.id);
+    if (tooltip) tooltip.style.display = 'none';
+  },
+
+  formatAge(isoString) {
+    try {
+      const then = new Date(isoString);
+      const now = new Date();
+      const hours = Math.floor((now - then) / 3600000);
+      if (hours < 1) return 'just now';
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.floor(hours / 24);
+      return `${days}d ago`;
+    } catch { return 'unknown'; }
+  },
+
+  initAreaMultiSelect(opts) {
+    const { optionsElId, dropdownElId, triggerElId, selectElId, focusAreas, selectedAreas, onChanged, enableDraw, disableDraw } = opts;
+    const options = document.getElementById(optionsElId);
+    const dropdown = document.getElementById(dropdownElId);
+    const trigger = document.getElementById(triggerElId);
+
+    focusAreas.forEach(fa => {
+      const label = document.createElement('label');
+      label.className = 'multiselect-option';
+      label.dataset.key = fa.name;
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = fa.name;
+      cb.checked = selectedAreas.has(fa.name);
+      const text = document.createElement('span');
+      text.textContent = fa.name;
+      label.append(cb, text);
+      options.appendChild(label);
+
+      cb.addEventListener('change', () => {
+        if (cb.checked) {
+          if (selectedAreas.has('custom')) {
+            selectedAreas.delete('custom');
+            const customCb = options.querySelector('[data-key="custom"] input');
+            if (customCb) customCb.checked = false;
+            disableDraw();
+          }
+          selectedAreas.add(fa.name);
+        } else {
+          selectedAreas.delete(fa.name);
+        }
+        onChanged();
+      });
+    });
+
+    const customLabel = document.createElement('label');
+    customLabel.className = 'multiselect-option';
+    customLabel.dataset.key = 'custom';
+    const customCb = document.createElement('input');
+    customCb.type = 'checkbox';
+    customCb.value = 'custom';
+    customCb.checked = selectedAreas.has('custom');
+    const customText = document.createElement('span');
+    customText.textContent = 'Custom (Draw on Map)';
+    customLabel.append(customCb, customText);
+    options.appendChild(customLabel);
+
+    customCb.addEventListener('change', () => {
+      if (customCb.checked) {
+        selectedAreas.forEach(name => { if (name !== 'custom') selectedAreas.delete(name); });
+        options.querySelectorAll('input[type="checkbox"]').forEach(c => { if (c !== customCb) c.checked = false; });
+        selectedAreas.add('custom');
+        enableDraw();
+      } else {
+        selectedAreas.delete('custom');
+        disableDraw();
+      }
+      onChanged();
+    });
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle('open');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#' + selectElId)) dropdown.classList.remove('open');
+    });
+
+    if (selectedAreas.has('custom')) enableDraw();
+  },
+
+  updateAreaTrigger(triggerSelector, selectedAreas, focusAreas) {
+    const label = document.querySelector(triggerSelector + ' .multiselect-label');
+    if (!label) return;
+    const hasCustom = selectedAreas.has('custom');
+    const namedAreas = [...selectedAreas].filter(a => a !== 'custom');
+    if (hasCustom) {
+      label.textContent = 'Custom area';
+    } else if (namedAreas.length === 0 || namedAreas.length === focusAreas.length) {
+      label.textContent = 'All Areas';
+    } else if (namedAreas.length === 1) {
+      label.textContent = namedAreas[0];
+    } else {
+      label.textContent = `${namedAreas.length} areas`;
+    }
+  },
+
+  initCompTableHovers(comps, contentEl, markersByAddr, showPhotoFn, hidePhotoFn) {
+    contentEl.querySelectorAll('.comp-table tbody tr').forEach((row, i) => {
+      const comp = comps[i];
+      if (!comp) return;
+      row.addEventListener('mouseenter', (e) => {
+        showPhotoFn(comp, e.clientX, e.clientY);
+        const m = markersByAddr[comp.address];
+        if (m) { m.setRadius(9); m.setStyle({ fillOpacity: 0.95 }); m.bringToFront(); }
+      });
+      row.addEventListener('mouseleave', () => {
+        hidePhotoFn();
+        const m = markersByAddr[comp.address];
+        if (m) { m.setRadius(5); m.setStyle({ fillOpacity: 0.7 }); }
+      });
+    });
+  },
+};
+
 // --- Preferences persistence via localStorage ---
 
 const Prefs = {
