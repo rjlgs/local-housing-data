@@ -42,6 +42,7 @@ const Listings = {
   init(container, data) {
     this._allListings = data.active_listings || [];
     this._allSold = data.sold_homes || [];
+    this._metro = data.config.metro || {};
     this._focusAreas = data.config.focus_areas;
     const focusAreas = this._focusAreas;
 
@@ -73,7 +74,7 @@ const Listings = {
           <h4>Data sources</h4>
           <ul>
             <li><strong>Listing data:</strong> Redfin active listings API</li>
-            <li><strong>Assessed values:</strong> Guilford County ArcGIS parcel data</li>
+            <li><strong>Assessed values:</strong> County ArcGIS parcel data</li>
             <li><strong>Sold comps:</strong> Redfin sold listings (last ~90 days)</li>
           </ul>
         </div>
@@ -236,7 +237,7 @@ const Listings = {
   },
 
   _initMap() {
-    this._map = MapUtils.createMap('ls-map', this._allListings);
+    this._map = MapUtils.createMap('ls-map', this._allListings, this._metro.map_center, this._metro.map_zoom);
     this._areaPolygonsLayer = L.featureGroup().addTo(this._map);
     this._drawnItems = L.featureGroup().addTo(this._map);
     this._markersLayer = L.layerGroup().addTo(this._map);

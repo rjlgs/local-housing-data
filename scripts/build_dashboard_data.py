@@ -396,11 +396,13 @@ def build_market_trends(config, market_data, homes):
         if key.startswith("Zip Code:"):
             trends[key] = records
 
-    # Always include baseline "Greensboro" (city-level)
-    for key in market_data:
-        if key.lower() == "greensboro":
-            trends["Greensboro"] = market_data[key]
-            break
+    # Always include the baseline city (city-level)
+    baseline_city = config.get("metro", {}).get("baseline_city", "")
+    if baseline_city:
+        for key in market_data:
+            if key.lower() == baseline_city.lower():
+                trends[baseline_city] = market_data[key]
+                break
 
     # Build zip_areas list for the multi-select dropdown
     zip_city_map = build_zip_city_map(homes)

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Greensboro Housing Dashboard</title>
+  <title>Housing Dashboard</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -14,7 +14,7 @@
 </head>
 <body>
   <header class="app-header">
-    <h1>Greensboro Housing Dashboard</h1>
+    <h1 id="app-title">Housing Dashboard</h1>
     <nav class="tab-nav">
       <button class="tab-btn active" data-tab="market-pulse">Market Pulse</button>
       <button class="tab-btn" data-tab="listings">Listings</button>
@@ -89,6 +89,14 @@
     DataLoader.load().then(data => {
       if (!data) return;
       dashboardData = data;
+
+      // Set dynamic title from config
+      const metroName = data.config && data.config.metro && data.config.metro.name;
+      if (metroName) {
+        const title = metroName + ' Housing Dashboard';
+        document.title = title;
+        document.getElementById('app-title').textContent = title;
+      }
 
       // Init saved or default tab
       const savedTab = Prefs.get('activeTab', 'market-pulse');

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Ingest Redfin market-level data for the Greensboro metro area.
+Ingest Redfin market-level data for a configured metro area.
 
 Downloads the city and zip-code level TSV files from Redfin's public S3 bucket,
-filters to the Greensboro metro, and saves as CSV.
+filters to the configured metro, and saves as CSV.
 
 NOTE: These files are ~1-1.5 GB compressed. We stream via curl | gunzip and
 read line-by-line to avoid loading everything into memory. A progress counter
@@ -12,6 +12,7 @@ prints every 500K lines so you know it's working.
 
 import csv
 import io
+import json
 import os
 import subprocess
 import sys
@@ -22,9 +23,6 @@ DATASETS = {
     "city": f"{S3_BASE}/city_market_tracker.tsv000.gz",
     "zip": f"{S3_BASE}/zip_code_market_tracker.tsv000.gz",
 }
-
-# Greensboro metro code from Redfin's data (unquoted in the TSV)
-GREENSBORO_METRO_CODE = "24660"
 
 # Columns to keep (strip quotes from TSV headers)
 KEEP_COLUMNS = [
@@ -47,8 +45,8 @@ KEEP_COLUMNS = [
 PROGRESS_INTERVAL = 500_000
 
 
-def stream_and_filter(url, level):
-    """Stream gzipped TSV from S3, filter line-by-line for Greensboro metro."""
+def stream_and_filter(url, level, metro_code, metro_name):
+    """Stream gzipped TSV from S3, filter line-by-line for the configured metro."""
     print(f"  Streaming {level}-level data (this may take a few minutes)...")
 
     # Pipe: curl streams the gzipped file, gunzip decompresses on the fly
@@ -78,7 +76,7 @@ def stream_and_filter(url, level):
         proc.kill()
         return []
 
-    print(f"  Scanning for Greensboro metro (code {GREENSBORO_METRO_CODE})...")
+    print(f"  Scanning for {metro_name} metro (code {metro_code})...")
 
     rows = []
     lines_scanned = 0
@@ -92,7 +90,7 @@ def stream_and_filter(url, level):
 
         # Quick check: does this line contain the metro code at all?
         # This is faster than splitting every line
-        if GREENSBORO_METRO_CODE not in line:
+        if metro_code not in line:
             continue
 
         values = line.strip().split('\t')
@@ -101,7 +99,7 @@ def stream_and_filter(url, level):
 
         # Verify the metro code is in the right column (not a false positive)
         metro_val = values[metro_col_idx].strip('"')
-        if metro_val != GREENSBORO_METRO_CODE:
+        if metro_val != metro_code:
             continue
 
         matches += 1
@@ -111,20 +109,26 @@ def stream_and_filter(url, level):
         rows.append(filtered)
 
     proc.wait()
-    print(f"  Scanned {lines_scanned:,} total lines, found {matches:,} Greensboro records.")
+    print(f"  Scanned {lines_scanned:,} total lines, found {matches:,} matching records.")
 
     return rows
 
 
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.join(os.path.dirname(script_dir), "data")
+    project_root = os.path.dirname(script_dir)
+    data_dir = os.path.join(project_root, "data")
     os.makedirs(data_dir, exist_ok=True)
+
+    with open(os.path.join(project_root, "config.json")) as f:
+        config = json.load(f)
+    metro_code = config["metro"]["redfin_metro_code"]
+    metro_name = config["metro"]["name"]
 
     for level, url in DATASETS.items():
         print(f"\nProcessing {level}-level Redfin data...")
-        rows = stream_and_filter(url, level)
-        print(f"  Found {len(rows):,} Greensboro-metro records.")
+        rows = stream_and_filter(url, level, metro_code, metro_name)
+        print(f"  Found {len(rows):,} {metro_name} metro records.")
 
         if not rows:
             print(f"  WARNING: No data found for {level}. Skipping.")

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Ingest recently sold homes from Redfin for the Greensboro metro area.
+Ingest recently sold homes from Redfin for the configured metro area.
 
 Uses Redfin's public CSV download endpoint (same as the website's "Download All"
 button). Iterates over each city in the metro, splitting by property type where
@@ -12,6 +12,7 @@ use city + property-type splitting and short time windows instead.
 
 import csv
 import io
+import json
 import os
 import sys
 import time
@@ -22,40 +23,6 @@ from datetime import datetime
 BASE_URL = "https://www.redfin.com/stingray/api/gis-csv"
 
 REGION_TYPE = "6"  # city/place
-
-# Cities in the Greensboro-High Point metro (code 24660).
-# Redfin table_id (used as region_id) and city name.
-METRO_CITIES = [
-    ("7161", "Greensboro"),
-    ("35795", "High Point"),
-    ("16806", "Summerfield"),
-    ("8762", "Jamestown"),
-    ("13593", "Pleasant Garden"),
-    ("16677", "Stokesdale"),
-    ("12395", "Oak Ridge"),
-    ("445", "Archdale"),
-    ("6669", "Gibsonville"),
-    ("18762", "Whitsett"),
-    ("23768", "McLeansville"),
-    ("15539", "Sedalia"),
-    ("22653", "Forest Oaks"),
-    ("14471", "Reidsville"),
-    ("5177", "Eden"),
-    ("2348", "Burlington"),
-    ("537", "Asheboro"),
-    ("14266", "Randleman"),
-    ("17528", "Trinity"),
-    ("9676", "Liberty"),
-    ("10348", "Madison"),
-    ("10706", "Mayodan"),
-    ("14253", "Ramseur"),
-    ("15519", "Seagrove"),
-    ("16512", "Staley"),
-    ("16694", "Stoneville"),
-    ("18359", "Wentworth"),
-    ("34317", "Ruffin"),
-    ("6368", "Franklinville"),
-]
 
 # How far back to pull sold homes (in days)
 DEFAULT_SOLD_WITHIN_DAYS = 90
@@ -96,11 +63,11 @@ COLUMN_MAP = {
 }
 
 
-def fetch_sold(region_id, uipt, sold_within_days):
+def fetch_sold(region_id, uipt, sold_within_days, market_slug):
     """Fetch sold homes CSV for a city + property type group."""
     params = {
         "al": "1",
-        "market": "greensboro",
+        "market": market_slug,
         "num_homes": "350",
         "ord": "redfin-recommended-asc",
         "page_number": "1",
@@ -135,13 +102,13 @@ def fetch_sold(region_id, uipt, sold_within_days):
     return rows
 
 
-def fetch_city(region_id, city_name, sold_within_days, seen):
+def fetch_city(region_id, city_name, sold_within_days, seen, market_slug):
     """Fetch all sold homes for a city, splitting by property type if needed."""
     city_rows = []
 
     for label, uipt in PROPERTY_TYPE_GROUPS:
         try:
-            rows = fetch_sold(region_id, uipt, sold_within_days)
+            rows = fetch_sold(region_id, uipt, sold_within_days, market_slug)
         except Exception as e:
             print(f"    ERROR ({label}): {e}")
             continue
@@ -149,7 +116,7 @@ def fetch_city(region_id, city_name, sold_within_days, seen):
         if len(rows) >= 347:
             # Likely truncated — fall back to 30-day window
             try:
-                rows = fetch_sold(region_id, uipt, 30)
+                rows = fetch_sold(region_id, uipt, 30, market_slug)
             except Exception as e:
                 print(f"    ERROR ({label}, 30-day fallback): {e}")
                 continue
@@ -175,19 +142,25 @@ def main():
             sys.exit(1)
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.join(os.path.dirname(script_dir), "data")
+    project_root = os.path.dirname(script_dir)
+    data_dir = os.path.join(project_root, "data")
     os.makedirs(data_dir, exist_ok=True)
     output_path = os.path.join(data_dir, "redfin_sold.csv")
 
+    with open(os.path.join(project_root, "config.json")) as f:
+        config = json.load(f)
+    metro_cities = [(c["region_id"], c["name"]) for c in config["cities"]]
+    market_slug = config["metro"]["redfin_market_slug"]
+
     print(f"Fetching sold homes from last {sold_within_days} days "
-          f"across {len(METRO_CITIES)} metro cities...\n")
+          f"across {len(metro_cities)} metro cities...\n")
 
     all_rows = []
     seen = set()  # deduplicate across cities
 
-    for region_id, city_name in METRO_CITIES:
+    for region_id, city_name in metro_cities:
         print(f"  {city_name}...", end=" ", flush=True)
-        city_rows = fetch_city(region_id, city_name, sold_within_days, seen)
+        city_rows = fetch_city(region_id, city_name, sold_within_days, seen, market_slug)
         print(f"{len(city_rows)} sales")
         all_rows.extend(city_rows)
         time.sleep(0.5)
