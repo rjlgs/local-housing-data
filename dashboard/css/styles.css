@@ -403,6 +403,69 @@ body {
   margin-bottom: 0;
 }
 
+.score-card-map {
+  flex: 2;
+  min-width: 480px;
+}
+
+.score-map-container {
+  height: 360px;
+  position: relative;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.zip-score-marker {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.7rem;
+  color: #fff;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.35);
+  pointer-events: none;
+}
+
+.score-map-tooltip {
+  position: fixed;
+  z-index: 9000;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+  padding: 0.625rem 0.875rem;
+  pointer-events: none;
+  min-width: 420px;
+}
+
+.smt-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.375rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.smt-zip {
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.smt-score {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.smt-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 .score-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -520,9 +583,17 @@ body {
 .area-score-name {
   font-size: 0.8125rem;
   font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.zip-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .area-score-label {

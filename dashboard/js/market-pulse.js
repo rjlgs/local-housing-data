@@ -212,9 +212,8 @@ const MarketPulse = {
         maxZoom: 13,
       }).addTo(map);
 
-      // Load GeoJSON
-      fetch('/data/zcta_boundaries.geojson')
-        .then(r => r.json())
+      // Load GeoJSON (shared cache with score map)
+      MapUtils.loadGeoJSON()
         .then(geojson => {
           geoLayer = L.geoJSON(geojson, {
             style: (feature) => {
@@ -478,38 +477,173 @@ const MarketPulse = {
       .map(a => ({ area: a, score: this._computeScore(trends[a.key]), records: trends[a.key] }))
       .filter(s => s.score);
 
+    // Clean up previous score map instance before replacing DOM
+    if (this._scoreMap) {
+      this._scoreMap.remove();
+      this._scoreMap = null;
+    }
+    if (this._scoreTooltipEl) {
+      this._scoreTooltipEl.remove();
+      this._scoreTooltipEl = null;
+    }
+
     let areaHtml = '';
     if (areaScores.length > 0) {
       areaHtml = `
-        <div class="score-card">
-          <h3>Per-Area Scores</h3>
-          <div class="area-scores-grid">
-            ${areaScores.map(({ area, score: s, records: r }) => {
-              const hists = periods.map(m => ({ m, data: this._getHistorical(r, m) }));
-              const histCols = `<span class="ast-hist-vals">${hists.map(h => `<span class="ast-hist-val">${h.m}mo</span>`).join('')}</span>`;
-              const histRow = (vals) => `<span class="ast-hist-vals">${hists.map(h => `<span class="ast-hist-val">${vals(h.data)}</span>`).join('')}</span>`;
-              return `
-              <div class="area-score-item">
-                <div class="area-score-value ${s.colorClass}">${s.composite}</div>
-                <div class="area-score-meta">
-                  <span class="area-score-name">${area.label}</span>
-                  <span class="area-score-label">${s.label}</span>
-                </div>
-                <div class="area-score-tooltip">
-                  <div class="ast-row ast-header"><span></span><span>Now</span>${histCols}<span></span></div>
-                  <div class="ast-row ast-composite"><span>Buyer Favorability</span><span class="${s.colorClass}">${s.composite}</span><span class="ast-hist-vals">${hists.map(h => { const hs = this._computeScoreAt(r, h.m); return `<span class="ast-hist-val ${hs ? hs.colorClass : ''}">${hs ? hs.composite : '\u2014'}</span>`; }).join('')}</span><span></span></div>
-                  <div class="ast-row"><span>Months of Supply</span><span>${s.avgSupply != null ? s.avgSupply.toFixed(1) : '\u2014'}</span>${histRow(d => this._fmtHist(d?.supply, 'dec'))}<div class="score-bar"><div class="score-fill" style="width:${s.supplyScore}%;background:${s.supplyScore>50?'#16a34a':'#dc2626'}"></div></div></div>
-                  <div class="ast-row"><span>Sale-to-List</span><span>${s.avgRatio != null ? s.avgRatio.toFixed(3) : '\u2014'}</span>${histRow(d => this._fmtHist(d?.ratio, 'ratio'))}<div class="score-bar"><div class="score-fill" style="width:${s.ratioScore}%;background:${s.ratioScore>50?'#16a34a':'#dc2626'}"></div></div></div>
-                  <div class="ast-row"><span>Days on Market</span><span>${s.avgDOM != null ? Math.round(s.avgDOM) : '\u2014'}</span>${histRow(d => this._fmtHist(d?.dom, 'int'))}<div class="score-bar"><div class="score-fill" style="width:${s.domScore}%;background:${s.domScore>50?'#16a34a':'#dc2626'}"></div></div></div>
-                  <div class="ast-row"><span>Price Drop Rate</span><span>${s.avgPriceDrops != null ? (s.avgPriceDrops * 100).toFixed(0) + '%' : '\u2014'}</span>${histRow(d => this._fmtHist(d?.drops, 'pct'))}<div class="score-bar"><div class="score-fill" style="width:${s.dropScore}%;background:${s.dropScore>50?'#16a34a':'#dc2626'}"></div></div></div>
-                </div>
-              </div>
-            `}).join('')}
-          </div>
+        <div class="score-card score-card-map">
+          <h3>Per-ZIP Scores</h3>
+          <div id="mp-score-map" class="score-map-container"></div>
         </div>
       `;
     }
 
     container.innerHTML = `<div class="score-row-wrap">${metroHtml}${areaHtml}</div>`;
+    if (areaScores.length > 0) {
+      this._renderScoreMap(trends, allAreas);
+    }
+  },
+
+  _scoreMap: null,
+
+  _renderScoreMap(trends, allAreas) {
+    const container = document.getElementById('mp-score-map');
+    if (!container) return;
+
+    const areaByKey = {};
+    allAreas.forEach(a => { areaByKey[a.key] = a; });
+
+    // Build score data for active non-metro zip areas
+    const scoreData = {};
+    allAreas.forEach(a => {
+      if (a.key === 'Greensboro' || !this._activeAreas.has(a.key)) return;
+      const records = trends[a.key];
+      if (records && records.length > 0) {
+        scoreData[a.key] = { score: this._computeScore(records), records };
+      }
+    });
+
+    const map = L.map(container, {
+      zoomControl: true,
+      attributionControl: false,
+      scrollWheelZoom: false,
+    });
+    L.tileLayer(MapUtils.TILE_URL, { maxZoom: 13 }).addTo(map);
+    this._scoreMap = map;
+
+    // Portal tooltip — appended to body so it isn't clipped by the map container
+    const tooltip = document.createElement('div');
+    tooltip.className = 'score-map-tooltip';
+    tooltip.style.display = 'none';
+    document.body.appendChild(tooltip);
+    this._scoreTooltipEl = tooltip;
+
+    const periods = [3, 6, 12, 24];
+
+    MapUtils.loadGeoJSON().then(geojson => {
+      const activeBounds = [];
+
+      const geoLayer = L.geoJSON(geojson, {
+        style: (feature) => {
+          const zip = feature.properties.ZCTA5;
+          const zipKey = `Zip Code: ${zip}`;
+          feature.properties._zipKey = zipKey;
+          const area = areaByKey[zipKey];
+          const active = !!scoreData[zipKey];
+          return {
+            color: active ? area.color : '#9ca3af',
+            weight: active ? 2 : 0.5,
+            fillColor: active ? area.color : '#d1d5db',
+            fillOpacity: active ? 0.3 : 0.04,
+          };
+        },
+        onEachFeature: (feature, layer) => {
+          const zipKey = feature.properties._zipKey;
+          const sd = scoreData[zipKey];
+          if (!sd) return;
+          const { score: s, records: r } = sd;
+          const area = areaByKey[zipKey];
+          const zip = zipKey.replace('Zip Code: ', '');
+          const hists = periods.map(m => ({ m, data: this._getHistorical(r, m) }));
+          const histRow = (vals) =>
+            `<span class="ast-hist-vals">${hists.map(h => `<span class="ast-hist-val">${vals(h.data)}</span>`).join('')}</span>`;
+
+          layer.on('mouseover', () => {
+            layer.setStyle({ fillOpacity: 0.55, weight: 3 });
+            tooltip.innerHTML = `
+              <div class="smt-header">
+                <span class="smt-zip">${zip}</span>
+                <span class="smt-score ${s.colorClass}">${s.composite}</span>
+                <span class="smt-label">${s.label}</span>
+              </div>
+              <div class="ast-row ast-header"><span></span><span>Now</span><span class="ast-hist-vals">${periods.map(m => `<span class="ast-hist-val">${m}mo</span>`).join('')}</span><span></span></div>
+              <div class="ast-row ast-composite"><span>Buyer Favorability</span><span class="${s.colorClass}">${s.composite}</span><span class="ast-hist-vals">${hists.map(h => { const hs = this._computeScoreAt(r, h.m); return `<span class="ast-hist-val ${hs ? hs.colorClass : ''}">${hs ? hs.composite : '\u2014'}</span>`; }).join('')}</span><span></span></div>
+              <div class="ast-row"><span>Months of Supply</span><span>${s.avgSupply != null ? s.avgSupply.toFixed(1) : '\u2014'}</span>${histRow(d => this._fmtHist(d?.supply, 'dec'))}<div class="score-bar"><div class="score-fill" style="width:${s.supplyScore}%;background:${s.supplyScore>50?'#16a34a':'#dc2626'}"></div></div></div>
+              <div class="ast-row"><span>Sale-to-List</span><span>${s.avgRatio != null ? s.avgRatio.toFixed(3) : '\u2014'}</span>${histRow(d => this._fmtHist(d?.ratio, 'ratio'))}<div class="score-bar"><div class="score-fill" style="width:${s.ratioScore}%;background:${s.ratioScore>50?'#16a34a':'#dc2626'}"></div></div></div>
+              <div class="ast-row"><span>Days on Market</span><span>${s.avgDOM != null ? Math.round(s.avgDOM) : '\u2014'}</span>${histRow(d => this._fmtHist(d?.dom, 'int'))}<div class="score-bar"><div class="score-fill" style="width:${s.domScore}%;background:${s.domScore>50?'#16a34a':'#dc2626'}"></div></div></div>
+              <div class="ast-row"><span>Price Drop Rate</span><span>${s.avgPriceDrops != null ? (s.avgPriceDrops*100).toFixed(0)+'%' : '\u2014'}</span>${histRow(d => this._fmtHist(d?.drops, 'pct'))}<div class="score-bar"><div class="score-fill" style="width:${s.dropScore}%;background:${s.dropScore>50?'#16a34a':'#dc2626'}"></div></div></div>
+            `;
+            tooltip.style.display = 'block';
+          });
+
+          layer.on('mousemove', (e) => {
+            const x = e.originalEvent.clientX;
+            const y = e.originalEvent.clientY;
+            const tw = tooltip.offsetWidth || 420;
+            const th = tooltip.offsetHeight || 180;
+            let left = x + 14;
+            let top = y - 10;
+            if (left + tw > window.innerWidth - 8) left = x - tw - 14;
+            if (top < 8) top = 8;
+            if (top + th > window.innerHeight - 8) top = window.innerHeight - th - 8;
+            tooltip.style.left = left + 'px';
+            tooltip.style.top = top + 'px';
+          });
+
+          layer.on('mouseout', () => {
+            layer.setStyle({ fillOpacity: 0.3, weight: 2, color: area.color });
+            tooltip.style.display = 'none';
+          });
+        },
+      }).addTo(map);
+
+      // Add score markers at polygon centroids
+      geoLayer.eachLayer(layer => {
+        const zipKey = layer.feature.properties._zipKey;
+        const sd = scoreData[zipKey];
+        if (!sd) return;
+        const { score: s } = sd;
+        const centroid = this._featureCentroid(layer.feature);
+        if (!centroid) return;
+        activeBounds.push(layer.getBounds());
+        const bg = s.colorClass === 'score-good' ? '#16a34a' : s.colorClass === 'score-neutral' ? '#ca8a04' : '#dc2626';
+        L.marker(centroid, {
+          icon: L.divIcon({
+            className: '',
+            html: `<div class="zip-score-marker" style="background:${bg}">${s.composite}</div>`,
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+          }),
+          interactive: false,
+          zIndexOffset: 1000,
+        }).addTo(map);
+      });
+
+      if (activeBounds.length > 0) {
+        map.fitBounds(activeBounds.reduce((a, b) => a.extend(b)), { padding: [24, 24] });
+      } else {
+        map.fitBounds(geoLayer.getBounds(), { padding: [10, 10] });
+      }
+    });
+  },
+
+  _featureCentroid(feature) {
+    const coords = feature.geometry.type === 'MultiPolygon'
+      ? feature.geometry.coordinates.flat(2)
+      : feature.geometry.coordinates.flat(1);
+    if (!coords.length) return null;
+    return [
+      coords.reduce((s, c) => s + c[1], 0) / coords.length,
+      coords.reduce((s, c) => s + c[0], 0) / coords.length,
+    ];
   },
 };

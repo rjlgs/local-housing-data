@@ -201,6 +201,20 @@ const MapUtils = {
   TILE_URL: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
   TILE_ATTR: '&copy; OpenStreetMap contributors',
 
+  _geojsonPromise: null,
+  _geojsonCache: null,
+
+  loadGeoJSON(url) {
+    url = url || '/data/zcta_boundaries.geojson';
+    if (this._geojsonCache) return Promise.resolve(this._geojsonCache);
+    if (!this._geojsonPromise) {
+      this._geojsonPromise = fetch(url)
+        .then(r => r.json())
+        .then(data => { this._geojsonCache = data; return data; });
+    }
+    return this._geojsonPromise;
+  },
+
   createMap(elementId, dataPoints, defaultCenter) {
     const pts = (dataPoints || []).filter(h => h.latitude != null && h.longitude != null);
     let center = defaultCenter || [36.07, -79.79];
