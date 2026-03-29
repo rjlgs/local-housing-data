@@ -168,7 +168,7 @@ def parse_sold_csv(path):
                     "latitude": safe_numeric(row.get("latitude")),
                     "longitude": safe_numeric(row.get("longitude")),
                     "redfin_url": row.get("redfin_url", "").strip() or None,
-                    "photo_url": None,
+                    "photo_urls": [],
                     # County data placeholders
                     "total_assessed": None,
                     "building_value": None,
@@ -249,7 +249,7 @@ def parse_active_csv(path):
                     "longitude": safe_numeric(row.get("longitude")),
                     "redfin_url": row.get("redfin_url", "").strip() or None,
                     "mls_number": row.get("mls_number", "").strip() or None,
-                    "photo_url": None,
+                    "photo_urls": [],
                     # Tracker-derived fields
                     "first_seen": row.get("first_seen", "").strip() or None,
                     "days_tracked": safe_numeric(row.get("days_tracked")),
@@ -416,24 +416,51 @@ def build_market_trends(config, market_data, homes):
 
 
 def fetch_photo_url(redfin_url):
-    """Fetch the og:image URL from a Redfin listing page."""
+    """Fetch all photo URLs from a Redfin listing page.
+
+    Reads up to 500 KB of the page to find CDN photo URLs embedded in the
+    page source, falling back to og:image if none are found.  Returns a list
+    of URL strings, or None on failure / no photos found.
+    """
     try:
         req = urllib.request.Request(redfin_url, headers={
             "User-Agent": "Mozilla/5.0 (compatible; housing-data-pipeline/1.0)",
         })
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            # Read just enough to get the <head> section
-            html = resp.read(32000).decode("utf-8", errors="ignore")
-        match = re.search(r'og:image["\s]+content="([^"]+)"', html)
-        return match.group(1) if match else None
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            html = resp.read(500000).decode("utf-8", errors="ignore")
+
+        # Extract all Redfin CDN photo URLs that appear inside JSON string quotes
+        urls = re.findall(
+            r'"(https://ssl\.cdn-redfin\.com/photo/[^"]+\.(?:jpg|jpeg|webp|png))"',
+            html,
+        )
+
+        # Deduplicate while preserving order
+        seen = set()
+        unique_urls = []
+        for u in urls:
+            if u not in seen:
+                seen.add(u)
+                unique_urls.append(u)
+
+        # Prefer full-size images (bigphoto / islphoto) over thumbnails
+        full_size = [u for u in unique_urls if "/bigphoto/" in u or "/islphoto/" in u]
+        result = full_size if full_size else unique_urls
+
+        if result:
+            return result
+
+        # Fallback: og:image from the <head>
+        match = re.search(r'og:image["\s]+content="([^"]+)"', html[:32000])
+        return [match.group(1)] if match else None
     except Exception:
         return None
 
 
 def fetch_photo_urls(homes):
-    """Fetch og:image photo URLs for all homes with Redfin URLs."""
-    # Load cache of previously fetched URLs to avoid re-fetching
-    cache_path = DATA_DIR / "photo_url_cache.json"
+    """Fetch all photo URLs for all homes with Redfin URLs."""
+    # Separate cache file (stores lists now, not single strings)
+    cache_path = DATA_DIR / "photo_urls_cache.json"
     cache = {}
     if cache_path.exists():
         with open(cache_path) as f:
@@ -444,8 +471,8 @@ def fetch_photo_urls(homes):
 
     for i, home in enumerate(to_fetch):
         url = home["redfin_url"]
-        photo = fetch_photo_url(url)
-        cache[url] = photo  # cache None too, to avoid retrying broken pages
+        photos = fetch_photo_url(url)
+        cache[url] = photos  # cache None too, to avoid retrying broken pages
         if (i + 1) % 25 == 0:
             print(f"    Fetched {i + 1}/{len(to_fetch)}...")
         time.sleep(0.5)
@@ -454,12 +481,12 @@ def fetch_photo_urls(homes):
     with open(cache_path, "w") as f:
         json.dump(cache, f)
 
-    # Assign photo URLs to homes
+    # Assign photo URL lists to homes
     assigned = 0
     for home in homes:
         url = home.get("redfin_url")
         if url and cache.get(url):
-            home["photo_url"] = cache[url]
+            home["photo_urls"] = cache[url]
             assigned += 1
 
     print(f"  Assigned photo URLs to {assigned}/{len(homes)} homes")

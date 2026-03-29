@@ -32,10 +32,9 @@ const AreaCompare = {
         <div class="tab-title-row">
           <h2>Area Compare</h2>
           <button id="ac-learn-more" class="btn-learn-more">Learn More</button>
-          ${dateRangeNote ? `<span class="date-range-badge">${dateRangeNote}</span>` : ''}
+          ${data.data_freshness && data.data_freshness.sold_homes ? `<span class="freshness-badge">Sold data updated ${this._formatAge(data.data_freshness.sold_homes)}</span>` : ''}
         </div>
         <p class="subtitle">Compare your focus areas side by side on price, size, and value.</p>
-        ${data.data_freshness && data.data_freshness.sold_homes ? `<span class="freshness-badge">Sold data updated ${this._formatAge(data.data_freshness.sold_homes)}</span>` : ''}
       </div>
       <div id="ac-modal" class="modal-overlay" style="display:none">
         <div class="modal-content">
@@ -55,6 +54,7 @@ const AreaCompare = {
           </ul>
         </div>
       </div>
+      ${dateRangeNote ? `<p class="date-range-note">${dateRangeNote}</p>` : ''}
       <div id="compare-table-wrap"></div>
       <div class="controls">
         <div class="trend-control">

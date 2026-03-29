@@ -447,7 +447,7 @@ const Listings = {
       <h3>Is This Price Reasonable?</h3>
       <div class="comp-header">
         <div class="comp-subject">
-          ${listing.photo_url ? `<img class="comp-subject-photo" src="${listing.photo_url}" alt="${listing.address}">` : ''}
+          ${MapUtils.compSubjectCarouselHTML(listing)}
           <div class="comp-subject-info">
             <h4><a href="${listing.redfin_url || '#'}" target="_blank" rel="noopener">${listing.address}</a></h4>
             <p>${listing.city} ${listing.zip_code} \u00b7 ${listing.beds}bd/${listing.baths}ba \u00b7 ${Utils.formatNumber(listing.sqft)} sqft</p>
@@ -491,6 +491,9 @@ const Listings = {
 
     document.getElementById('ls-comp-card').style.display = 'block';
     document.getElementById('ls-comp-backdrop').style.display = 'block';
+    const photos = listing.photo_urls && listing.photo_urls.length
+      ? listing.photo_urls : (listing.photo_url ? [listing.photo_url] : []);
+    MapUtils.initCompCarousel(document.querySelector('#ls-comp-content .comp-subject-carousel'), photos);
     this._initCompMap(listing, comps);
 
     MapUtils.bindTableMarkerHovers({

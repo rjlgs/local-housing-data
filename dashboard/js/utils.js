@@ -466,7 +466,10 @@ const MapUtils = {
   createPhotoTooltip() {
     const el = document.createElement('div');
     el.className = 'photo-tooltip';
-    el.innerHTML = `<img class="photo-tooltip-img" src="" alt="">
+    el.innerHTML = `<div class="photo-tooltip-carousel-wrap">
+        <img class="photo-tooltip-img" src="" alt="">
+        <span class="photo-tooltip-cycle-counter"></span>
+      </div>
       <div class="photo-tooltip-body">
         <div class="photo-tooltip-address"></div>
         <div class="photo-tooltip-price"></div>
@@ -480,9 +483,34 @@ const MapUtils = {
 
   showPhoto(tooltip, timeoutRef, home, x, y, priceField) {
     clearTimeout(timeoutRef.id);
-    if (!home.photo_url) return;
+    const photos = home.photo_urls && home.photo_urls.length
+      ? home.photo_urls
+      : (home.photo_url ? [home.photo_url] : []);
+    if (!photos.length) return;
     timeoutRef.id = setTimeout(() => {
-      tooltip.querySelector('.photo-tooltip-img').src = home.photo_url;
+      const img = tooltip.querySelector('.photo-tooltip-img');
+      const counter = tooltip.querySelector('.photo-tooltip-cycle-counter');
+      img.src = photos[0];
+
+      // Preload all photos upfront (tooltips have short display windows)
+      photos.forEach(url => { const i = new Image(); i.src = url; });
+
+      // Auto-cycle through photos if multiple
+      clearInterval(tooltip._cycleTimer);
+      if (photos.length > 1) {
+        let idx = 0;
+        counter.textContent = `1 / ${photos.length}`;
+        counter.style.display = '';
+        tooltip._cycleTimer = setInterval(() => {
+          idx = (idx + 1) % photos.length;
+          img.src = photos[idx];
+          counter.textContent = `${idx + 1} / ${photos.length}`;
+        }, 2200);
+      } else {
+        counter.style.display = 'none';
+        tooltip._cycleTimer = null;
+      }
+
       tooltip.querySelector('.photo-tooltip-address').textContent = home.address || '';
       tooltip.querySelector('.photo-tooltip-price').textContent = Utils.formatCurrency(home[priceField || 'sale_price'] || home.sale_price || home.list_price);
       const specs = [
@@ -506,7 +534,69 @@ const MapUtils = {
 
   hidePhoto(tooltip, timeoutRef) {
     clearTimeout(timeoutRef.id);
-    if (tooltip) tooltip.style.display = 'none';
+    if (tooltip) {
+      clearInterval(tooltip._cycleTimer);
+      tooltip._cycleTimer = null;
+      tooltip.style.display = 'none';
+    }
+  },
+
+  /**
+   * Returns HTML for the comp-subject photo area.
+   * Single photo → bare <img>. Multiple photos → carousel wrapper.
+   */
+  compSubjectCarouselHTML(home) {
+    const photos = home.photo_urls && home.photo_urls.length
+      ? home.photo_urls
+      : (home.photo_url ? [home.photo_url] : []);
+    if (!photos.length) return '';
+    const src = photos[0].replace(/"/g, '&quot;');
+    const alt = (home.address || '').replace(/"/g, '&quot;');
+    if (photos.length === 1) {
+      return `<img class="comp-subject-photo" src="${src}" alt="${alt}">`;
+    }
+    return `<div class="comp-subject-carousel">
+      <img class="comp-subject-photo" src="${src}" alt="${alt}">
+      <button class="carousel-btn carousel-btn-prev" type="button" aria-label="Previous photo">&#8249;</button>
+      <button class="carousel-btn carousel-btn-next" type="button" aria-label="Next photo">&#8250;</button>
+      <span class="carousel-counter">1 / ${photos.length}</span>
+    </div>`;
+  },
+
+  /**
+   * Wires up prev/next buttons and preload-ahead logic for a comp carousel.
+   * Call after the carousel HTML has been inserted into the DOM.
+   */
+  initCompCarousel(container, photos) {
+    if (!container || !photos || photos.length <= 1) return;
+    const img = container.querySelector('.comp-subject-photo');
+    const counter = container.querySelector('.carousel-counter');
+    let idx = 0;
+
+    const preloadAhead = (from) => {
+      for (let i = 1; i <= 2; i++) {
+        const next = (from + i) % photos.length;
+        const pre = new Image();
+        pre.src = photos[next];
+      }
+    };
+    preloadAhead(0);
+
+    const goTo = (newIdx) => {
+      idx = ((newIdx % photos.length) + photos.length) % photos.length;
+      img.src = photos[idx];
+      counter.textContent = `${idx + 1} / ${photos.length}`;
+      preloadAhead(idx);
+    };
+
+    container.querySelector('.carousel-btn-prev').addEventListener('click', (e) => {
+      e.stopPropagation();
+      goTo(idx - 1);
+    });
+    container.querySelector('.carousel-btn-next').addEventListener('click', (e) => {
+      e.stopPropagation();
+      goTo(idx + 1);
+    });
   },
 
   formatAge(isoString) {

@@ -45,9 +45,9 @@ const PropertyExplorer = {
         <div class="tab-title-row">
           <h2>Property Explorer</h2>
           <button id="pe-learn-more" class="btn-learn-more">Learn More</button>
+          ${data.data_freshness && data.data_freshness.sold_homes ? `<span class="freshness-badge">Sold data updated ${MapUtils.formatAge(data.data_freshness.sold_homes)}</span>` : ''}
         </div>
         <p class="subtitle">Search recent sales. Filter by area, size, and price. Draw a polygon on the map to define a custom area.</p>
-        ${data.data_freshness && data.data_freshness.sold_homes ? `<span class="freshness-badge">Sold data updated ${MapUtils.formatAge(data.data_freshness.sold_homes)}</span>` : ''}
       </div>
       <div id="pe-modal" class="modal-overlay" style="display:none">
         <div class="modal-content">
@@ -367,7 +367,7 @@ const PropertyExplorer = {
       <h3>Comparable Sales Analysis</h3>
       <div class="comp-header">
         <div class="comp-subject">
-          ${home.photo_url ? `<img class="comp-subject-photo" src="${home.photo_url}" alt="${home.address}">` : ''}
+          ${MapUtils.compSubjectCarouselHTML(home)}
           <div class="comp-subject-info">
             <h4><a href="${this._zillowUrl(home)}" target="_blank" rel="noopener">${home.address}</a></h4>
             <p>${home.city} ${home.zip_code} · ${home.beds}bd/${home.baths}ba · ${Utils.formatNumber(home.sqft)} sqft</p>
@@ -410,6 +410,9 @@ const PropertyExplorer = {
 
     document.getElementById('comp-hover-card').style.display = 'block';
     document.getElementById('comp-hover-backdrop').style.display = 'block';
+    const photos = home.photo_urls && home.photo_urls.length
+      ? home.photo_urls : (home.photo_url ? [home.photo_url] : []);
+    MapUtils.initCompCarousel(document.querySelector('#comp-hover-content .comp-subject-carousel'), photos);
     this._initCompMap(home, comps);
 
     MapUtils.bindTableMarkerHovers({
