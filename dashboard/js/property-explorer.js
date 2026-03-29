@@ -14,9 +14,12 @@ const PropertyExplorer = {
   _drawControl: null,
   _areaPolygonsLayer: null,
   _customPolygon: null, // user-drawn polygon as [[lat,lng], ...]
+  _selectedAreas: new Set(), // names of selected focus areas (empty = all)
   _markersByAddr: {}, // address -> Leaflet marker, for bidirectional hover
   _photoTooltip: null,
   _photoTimeout: null,
+  _compMap: null,
+  _compMarkersByAddr: {},
 
   init(container, data) {
     this._allHomes = data.sold_homes;
@@ -30,6 +33,7 @@ const PropertyExplorer = {
           <button id="pe-learn-more" class="btn-learn-more">Learn More</button>
         </div>
         <p class="subtitle">Search recent sales. Filter by area, size, and price. Draw a polygon on the map to define a custom area.</p>
+        ${data.data_freshness && data.data_freshness.sold_homes ? `<span class="freshness-badge">Sold data updated ${this._formatAge(data.data_freshness.sold_homes)}</span>` : ''}
       </div>
       <div id="pe-modal" class="modal-overlay" style="display:none">
         <div class="modal-content">
@@ -55,11 +59,15 @@ const PropertyExplorer = {
           <div class="filter-cluster-row">
             <div class="filter-group">
               <label>&nbsp;</label>
-              <select id="filter-area">
-                <option value="all">All Areas</option>
-                ${focusAreas.map(fa => `<option value="${fa.name}">${fa.name}</option>`).join('')}
-                <option value="custom">Custom (Draw on Map)</option>
-              </select>
+              <div id="pe-area-select" class="multiselect">
+                <button type="button" class="multiselect-trigger" id="pe-area-trigger">
+                  <span class="multiselect-label">All Areas</span>
+                  <span class="multiselect-arrow">&#9662;</span>
+                </button>
+                <div class="multiselect-dropdown" id="pe-area-dropdown">
+                  <div class="multiselect-options" id="pe-area-options"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -153,7 +161,7 @@ const PropertyExplorer = {
 
     // Restore saved filters
     const saved = Prefs.get('pe', {});
-    if (saved.area) document.getElementById('filter-area').value = saved.area;
+    if (Array.isArray(saved.areas)) this._selectedAreas = new Set(saved.areas);
     if (saved.bedsMin) document.getElementById('filter-beds-min').value = saved.bedsMin;
     if (saved.bedsMax) document.getElementById('filter-beds-max').value = saved.bedsMax;
     if (saved.bathsMin) document.getElementById('filter-baths-min').value = saved.bathsMin;
@@ -170,17 +178,6 @@ const PropertyExplorer = {
     // Bind events
     document.getElementById('filter-apply').addEventListener('click', () => this._applyFilters(focusAreas));
     document.getElementById('filter-clear').addEventListener('click', () => this._clearFilters(focusAreas));
-    document.getElementById('filter-area').addEventListener('change', () => {
-      const val = document.getElementById('filter-area').value;
-      if (val === 'custom') {
-        this._enableDraw();
-      } else {
-        this._disableDraw();
-        this._customPolygon = null;
-        this._showAreaPolygon(val, focusAreas);
-      }
-      this._applyFilters(focusAreas);
-    });
 
     // Also apply on Enter in any input
     container.querySelectorAll('input').forEach(el => {
@@ -191,12 +188,7 @@ const PropertyExplorer = {
 
     this._initMap();
     this._initPhotoTooltip();
-
-    // Show area polygon if a saved area is selected
-    const areaVal = document.getElementById('filter-area').value;
-    if (areaVal !== 'all' && areaVal !== 'custom') {
-      this._showAreaPolygon(areaVal, focusAreas);
-    }
+    this._initAreaMultiSelect(focusAreas);
 
     // Initial render with saved or default filters
     this._applyFilters(focusAreas);
@@ -250,13 +242,16 @@ const PropertyExplorer = {
       this._drawnItems.clearLayers();
       this._drawnItems.addLayer(e.layer);
       this._customPolygon = e.layer.getLatLngs()[0].map(ll => [ll.lat, ll.lng]);
-      document.getElementById('filter-area').value = 'custom';
       this._applyFilters(this._focusAreas);
     });
 
     // Handle polygon deletion
     this._map.on(L.Draw.Event.DELETED, () => {
       this._customPolygon = null;
+      this._selectedAreas.delete('custom');
+      const customCb = document.querySelector('#pe-area-options [data-key="custom"] input');
+      if (customCb) customCb.checked = false;
+      this._updateAreaTrigger(this._focusAreas);
       this._applyFilters(this._focusAreas);
     });
 
@@ -285,41 +280,35 @@ const PropertyExplorer = {
     this._drawnItems.clearLayers();
   },
 
-  _showAreaPolygon(areaName, focusAreas) {
+  _showAreaPolygons(areaNames, focusAreas, filteredHomes) {
     this._areaPolygonsLayer.clearLayers();
-    if (areaName === 'all' || areaName === 'custom') return;
-    const fa = focusAreas.find(a => a.name === areaName);
-    if (!fa || !fa.polygon || fa.polygon.length < 3) return;
+    if (!areaNames.length) return;
 
-    const poly = L.polygon(fa.polygon, {
-      color: '#2563eb',
-      weight: 2,
-      fillOpacity: 0.08,
-      dashArray: '6 4',
+    areaNames.forEach(name => {
+      const fa = focusAreas.find(a => a.name === name);
+      if (fa && fa.polygon && fa.polygon.length >= 3) {
+        this._areaPolygonsLayer.addLayer(L.polygon(fa.polygon, {
+          color: '#2563eb', weight: 2, fillOpacity: 0.08, dashArray: '6 4', interactive: false,
+        }));
+      }
     });
-    this._areaPolygonsLayer.addLayer(poly);
-    this._map.fitBounds(poly.getBounds(), { padding: [40, 40] });
-  },
 
-  _showBoundsFromHomes(homes) {
-    this._areaPolygonsLayer.clearLayers();
-    const pts = homes.filter(h => h.latitude != null && h.longitude != null);
-    if (pts.length < 2) return;
-    const lats = pts.map(h => h.latitude);
-    const lngs = pts.map(h => h.longitude);
-    const pad = 0.005;
-    const bounds = [
-      [Math.min(...lats) - pad, Math.min(...lngs) - pad],
-      [Math.max(...lats) + pad, Math.max(...lngs) + pad],
-    ];
-    const rect = L.rectangle(bounds, {
-      color: '#2563eb',
-      weight: 2,
-      fillOpacity: 0.08,
-      dashArray: '6 4',
-    });
-    this._areaPolygonsLayer.addLayer(rect);
-    this._map.fitBounds(rect.getBounds(), { padding: [40, 40] });
+    if (this._areaPolygonsLayer.getLayers().length > 0) {
+      this._map.fitBounds(this._areaPolygonsLayer.getBounds(), { padding: [40, 40] });
+    } else if (filteredHomes) {
+      // No defined polygons — derive bounding box from filtered homes
+      const pts = filteredHomes.filter(h => h.latitude != null && h.longitude != null);
+      if (pts.length < 2) return;
+      const lats = pts.map(h => h.latitude);
+      const lngs = pts.map(h => h.longitude);
+      const pad = 0.005;
+      const rect = L.rectangle([
+        [Math.min(...lats) - pad, Math.min(...lngs) - pad],
+        [Math.max(...lats) + pad, Math.max(...lngs) + pad],
+      ], { color: '#2563eb', weight: 2, fillOpacity: 0.08, dashArray: '6 4', interactive: false });
+      this._areaPolygonsLayer.addLayer(rect);
+      this._map.fitBounds(rect.getBounds(), { padding: [40, 40] });
+    }
   },
 
   _renderMarkers(homes) {
@@ -334,12 +323,6 @@ const PropertyExplorer = {
         weight: 1,
         fillOpacity: 0.6,
       });
-      marker.bindPopup(`
-        <strong>${h.address || '—'}</strong><br>
-        ${Utils.formatCurrency(h.sale_price)} · ${h.beds || '?'}bd/${h.baths || '?'}ba · ${Utils.formatNumber(h.sqft)} sqft<br>
-        ${h.neighborhood || ''} ${h.city || ''} ${h.zip_code || ''}
-      `, { maxWidth: 280 });
-
       // Map hover → highlight corresponding table row + show photo
       marker.on('mouseover', (e) => {
         marker.setRadius(9);
@@ -367,7 +350,7 @@ const PropertyExplorer = {
 
   _getFilters() {
     return {
-      area: document.getElementById('filter-area').value,
+      areas: [...this._selectedAreas],
       bedsMin: document.getElementById('filter-beds-min').value,
       bedsMax: document.getElementById('filter-beds-max').value,
       bathsMin: document.getElementById('filter-baths-min').value,
@@ -384,7 +367,9 @@ const PropertyExplorer = {
   },
 
   _clearFilters(focusAreas) {
-    document.getElementById('filter-area').value = 'all';
+    this._selectedAreas = new Set();
+    document.querySelectorAll('#pe-area-options input[type="checkbox"]').forEach(cb => cb.checked = false);
+    this._updateAreaTrigger(focusAreas);
     document.getElementById('filter-beds-min').value = '';
     document.getElementById('filter-beds-max').value = '';
     document.getElementById('filter-baths-min').value = '';
@@ -409,13 +394,15 @@ const PropertyExplorer = {
     let homes = [...this._allHomes];
 
     // Area filter
-    if (f.area === 'custom' && this._customPolygon) {
+    if (f.areas.includes('custom') && this._customPolygon) {
       homes = Utils.filterByArea(homes, { polygon: this._customPolygon });
-    } else if (f.area !== 'all' && f.area !== 'custom') {
-      const areaConfig = focusAreas.find(fa => fa.name === f.area);
-      if (areaConfig) {
-        homes = Utils.filterByArea(homes, areaConfig);
-      }
+    } else if (f.areas.length > 0 && !f.areas.includes('custom')) {
+      const matched = new Set();
+      f.areas.forEach(areaName => {
+        const areaConfig = focusAreas.find(fa => fa.name === areaName);
+        if (areaConfig) Utils.filterByArea(homes, areaConfig).forEach(h => matched.add(h));
+      });
+      homes = homes.filter(h => matched.has(h));
     }
 
     // Numeric filters
@@ -436,13 +423,9 @@ const PropertyExplorer = {
     this._filteredHomes = homes;
     this._renderMarkers(homes);
 
-    // For areas filtered by city/neighborhood name (no polygon defined), derive a
-    // bounding box from the filtered homes and show it on the map.
-    if (f.area !== 'all' && f.area !== 'custom') {
-      const areaConfig = focusAreas.find(fa => fa.name === f.area);
-      if (areaConfig && (!areaConfig.polygon || areaConfig.polygon.length < 3)) {
-        this._showBoundsFromHomes(homes);
-      }
+    const namedAreas = f.areas.filter(a => a !== 'custom');
+    if (namedAreas.length > 0) {
+      this._showAreaPolygons(namedAreas, focusAreas, homes);
     }
 
     this._renderResults(homes);
@@ -500,7 +483,7 @@ const PropertyExplorer = {
 
     const rowsHtml = display.map(h => `
       <tr class="clickable-row" data-addr="${(h.address || '').replace(/"/g, '&quot;')}">
-        <td>${h.sold_date || '—'}</td>
+        <td>${Utils.formatDate(h.sold_date)}</td>
         <td class="addr-cell"><a href="${this._zillowUrl(h)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${h.address || '—'}</a></td>
         <td>${h.city || '—'}</td>
         <td>${h.neighborhood || '—'}</td>
@@ -591,9 +574,12 @@ const PropertyExplorer = {
       <h3>Comparable Sales Analysis</h3>
       <div class="comp-header">
         <div class="comp-subject">
-          <h4><a href="${this._zillowUrl(home)}" target="_blank" rel="noopener">${home.address}</a></h4>
-          <p>${home.city} ${home.zip_code} · ${home.beds}bd/${home.baths}ba · ${Utils.formatNumber(home.sqft)} sqft</p>
-          <p class="comp-price">Sold: ${Utils.formatCurrency(home.sale_price)} ${home.sold_date ? `on ${home.sold_date}` : ''}</p>
+          ${home.photo_url ? `<img class="comp-subject-photo" src="${home.photo_url}" alt="${home.address}">` : ''}
+          <div class="comp-subject-info">
+            <h4><a href="${this._zillowUrl(home)}" target="_blank" rel="noopener">${home.address}</a></h4>
+            <p>${home.city} ${home.zip_code} · ${home.beds}bd/${home.baths}ba · ${Utils.formatNumber(home.sqft)} sqft</p>
+            <p class="comp-price">Sold: ${Utils.formatCurrency(home.sale_price)} ${home.sold_date ? `on ${Utils.formatDate(home.sold_date)}` : ''}</p>
+          </div>
         </div>
         <div class="comp-metrics">
           <div class="metric">
@@ -612,20 +598,21 @@ const PropertyExplorer = {
           </div>
         </div>
       </div>
+      <div id="comp-hover-map" class="comp-map"></div>
       ${comps.length > 0 ? `
         <table class="data-table comp-table">
           <thead><tr>
-            <th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th><th>Sold</th>
+            <th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
           </tr></thead>
           <tbody>
             ${comps.slice(0, 15).map(c => `
               <tr>
+                <td>${Utils.formatDate(c.sold_date)}</td>
                 <td><a href="${this._zillowUrl(c)}" target="_blank" rel="noopener">${c.address}</a></td>
                 <td>${Utils.formatCurrency(c.sale_price)}</td>
                 <td>${Utils.formatCurrency(c.price_per_sqft)}</td>
                 <td>${Utils.formatNumber(c.sqft)}</td>
                 <td>${c.beds}/${c.baths}</td>
-                <td>${c.sold_date || '—'}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -635,17 +622,98 @@ const PropertyExplorer = {
 
     document.getElementById('comp-hover-card').style.display = 'block';
     document.getElementById('comp-hover-backdrop').style.display = 'block';
+    this._initCompMap(home, comps);
+    this._initCompTableHovers(comps.slice(0, 15), document.getElementById('comp-hover-content'));
   },
 
   _hideComps() {
     document.getElementById('comp-hover-card').style.display = 'none';
     document.getElementById('comp-hover-backdrop').style.display = 'none';
+    if (this._compMap) { this._compMap.remove(); this._compMap = null; }
+  },
+
+  _initCompTableHovers(comps, contentEl) {
+    contentEl.querySelectorAll('.comp-table tbody tr').forEach((row, i) => {
+      const comp = comps[i];
+      if (!comp) return;
+      row.addEventListener('mouseenter', (e) => {
+        this._showPhoto(comp, e.clientX, e.clientY);
+        const m = this._compMarkersByAddr[comp.address];
+        if (m) { m.setRadius(9); m.setStyle({ fillOpacity: 0.95 }); m.bringToFront(); }
+      });
+      row.addEventListener('mouseleave', () => {
+        this._hidePhoto();
+        const m = this._compMarkersByAddr[comp.address];
+        if (m) { m.setRadius(5); m.setStyle({ fillOpacity: 0.7 }); }
+      });
+    });
+  },
+
+  _initCompMap(home, comps) {
+    if (this._compMap) { this._compMap.remove(); this._compMap = null; }
+    this._compMarkersByAddr = {};
+    const mapEl = document.getElementById('comp-hover-map');
+    if (!mapEl) return;
+
+    const compPts = comps.filter(c => c.latitude != null && c.longitude != null);
+    const hasSubject = home.latitude != null && home.longitude != null;
+
+    if (!hasSubject && compPts.length === 0) {
+      mapEl.style.display = 'none';
+      return;
+    }
+
+    const map = L.map(mapEl, { zoomControl: true, scrollWheelZoom: false });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    // Comp markers — blue
+    compPts.forEach(c => {
+      const m = L.circleMarker([c.latitude, c.longitude], {
+        radius: 5, fillColor: '#2563eb', color: '#1d4ed8', weight: 1, fillOpacity: 0.7,
+      }).addTo(map);
+      m.on('mouseover', (e) => {
+        m.setRadius(8); m.setStyle({ fillOpacity: 0.95 }); m.bringToFront();
+        const me = e.originalEvent;
+        if (me) this._showPhoto(c, me.clientX, me.clientY);
+      });
+      m.on('mouseout', () => { m.setRadius(5); m.setStyle({ fillOpacity: 0.7 }); this._hidePhoto(); });
+      if (c.address) this._compMarkersByAddr[c.address] = m;
+    });
+
+    // Subject marker — red, slightly larger
+    if (hasSubject) {
+      L.circleMarker([home.latitude, home.longitude], {
+        radius: 8, fillColor: '#ef4444', color: '#dc2626', weight: 2, fillOpacity: 0.9,
+      }).bindTooltip(`${home.address || ''} (subject)`, { permanent: false }).addTo(map);
+    }
+
+    // Fit bounds to all points
+    const allPts = [
+      ...(hasSubject ? [[home.latitude, home.longitude]] : []),
+      ...compPts.map(c => [c.latitude, c.longitude]),
+    ];
+    if (allPts.length === 1) {
+      map.setView(allPts[0], 14);
+    } else {
+      map.fitBounds(L.latLngBounds(allPts), { padding: [24, 24] });
+    }
+
+    this._compMap = map;
   },
 
   _initPhotoTooltip() {
     const el = document.createElement('div');
     el.className = 'photo-tooltip';
-    el.innerHTML = '<img class="photo-tooltip-img" src="" alt=""><div class="photo-tooltip-caption"></div>';
+    el.innerHTML = `<img class="photo-tooltip-img" src="" alt="">
+      <div class="photo-tooltip-body">
+        <div class="photo-tooltip-address"></div>
+        <div class="photo-tooltip-price"></div>
+        <div class="photo-tooltip-specs"></div>
+        <div class="photo-tooltip-location"></div>
+      </div>`;
     el.style.display = 'none';
     document.body.appendChild(el);
     this._photoTooltip = el;
@@ -657,9 +725,17 @@ const PropertyExplorer = {
     this._photoTimeout = setTimeout(() => {
       const tip = this._photoTooltip;
       tip.querySelector('.photo-tooltip-img').src = home.photo_url;
-      tip.querySelector('.photo-tooltip-caption').textContent = home.address || '';
-      // Position near cursor, flip if near viewport edge
-      const tw = 340, th = 240;
+      tip.querySelector('.photo-tooltip-address').textContent = home.address || '';
+      tip.querySelector('.photo-tooltip-price').textContent = Utils.formatCurrency(home.sale_price || home.list_price);
+      const specs = [
+        home.beds != null ? `${home.beds}bd` : null,
+        home.baths != null ? `${home.baths}ba` : null,
+        home.sqft ? `${Utils.formatNumber(home.sqft)} sqft` : null,
+      ].filter(Boolean).join(' · ');
+      tip.querySelector('.photo-tooltip-specs').textContent = specs;
+      tip.querySelector('.photo-tooltip-location').textContent =
+        [home.neighborhood, home.city, home.zip_code].filter(Boolean).join(' ');
+      const tw = 340, th = 300;
       let left = x + 16, top = y - th / 2;
       if (left + tw > window.innerWidth - 10) left = x - tw - 16;
       if (top < 10) top = 10;
@@ -673,6 +749,111 @@ const PropertyExplorer = {
   _hidePhoto() {
     clearTimeout(this._photoTimeout);
     if (this._photoTooltip) this._photoTooltip.style.display = 'none';
+  },
+
+  _initAreaMultiSelect(focusAreas) {
+    const options = document.getElementById('pe-area-options');
+    const dropdown = document.getElementById('pe-area-dropdown');
+    const trigger = document.getElementById('pe-area-trigger');
+
+    focusAreas.forEach(fa => {
+      const label = document.createElement('label');
+      label.className = 'multiselect-option';
+      label.dataset.key = fa.name;
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = fa.name;
+      cb.checked = this._selectedAreas.has(fa.name);
+      const text = document.createElement('span');
+      text.textContent = fa.name;
+      label.append(cb, text);
+      options.appendChild(label);
+
+      cb.addEventListener('change', () => {
+        if (cb.checked) {
+          if (this._selectedAreas.has('custom')) {
+            this._selectedAreas.delete('custom');
+            const customCb = options.querySelector('[data-key="custom"] input');
+            if (customCb) customCb.checked = false;
+            this._disableDraw();
+            this._customPolygon = null;
+          }
+          this._selectedAreas.add(fa.name);
+        } else {
+          this._selectedAreas.delete(fa.name);
+        }
+        this._updateAreaTrigger(focusAreas);
+        this._applyFilters(focusAreas);
+      });
+    });
+
+    // Custom draw option
+    const customLabel = document.createElement('label');
+    customLabel.className = 'multiselect-option';
+    customLabel.dataset.key = 'custom';
+    const customCb = document.createElement('input');
+    customCb.type = 'checkbox';
+    customCb.value = 'custom';
+    customCb.checked = this._selectedAreas.has('custom');
+    const customText = document.createElement('span');
+    customText.textContent = 'Custom (Draw on Map)';
+    customLabel.append(customCb, customText);
+    options.appendChild(customLabel);
+
+    customCb.addEventListener('change', () => {
+      if (customCb.checked) {
+        this._selectedAreas.forEach(name => { if (name !== 'custom') this._selectedAreas.delete(name); });
+        options.querySelectorAll('input[type="checkbox"]').forEach(c => { if (c !== customCb) c.checked = false; });
+        this._selectedAreas.add('custom');
+        this._enableDraw();
+      } else {
+        this._selectedAreas.delete('custom');
+        this._disableDraw();
+        this._customPolygon = null;
+      }
+      this._updateAreaTrigger(focusAreas);
+      this._applyFilters(focusAreas);
+    });
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle('open');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#pe-area-select')) dropdown.classList.remove('open');
+    });
+
+    if (this._selectedAreas.has('custom')) this._enableDraw();
+    this._updateAreaTrigger(focusAreas);
+  },
+
+  _updateAreaTrigger(focusAreas) {
+    const label = document.querySelector('#pe-area-trigger .multiselect-label');
+    if (!label) return;
+    const hasCustom = this._selectedAreas.has('custom');
+    const namedAreas = [...this._selectedAreas].filter(a => a !== 'custom');
+    if (hasCustom) {
+      label.textContent = 'Custom area';
+    } else if (namedAreas.length === 0 || namedAreas.length === focusAreas.length) {
+      label.textContent = 'All Areas';
+    } else if (namedAreas.length === 1) {
+      label.textContent = namedAreas[0];
+    } else {
+      label.textContent = `${namedAreas.length} areas`;
+    }
+  },
+
+  _formatAge(isoString) {
+    try {
+      const then = new Date(isoString);
+      const now = new Date();
+      const hours = Math.floor((now - then) / 3600000);
+      if (hours < 1) return 'just now';
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.floor(hours / 24);
+      return `${days}d ago`;
+    } catch { return 'unknown'; }
   },
 
   _zillowUrl(h) {

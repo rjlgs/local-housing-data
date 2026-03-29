@@ -50,34 +50,12 @@ def load_csv(path):
         return list(csv.DictReader(f))
 
 
-def main():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.join(os.path.dirname(script_dir), "data")
-
-    county_path = os.path.join(data_dir, "county_parcels.csv")
-    sold_path = os.path.join(data_dir, "redfin_sold.csv")
-    output_path = os.path.join(data_dir, "combined_properties.csv")
-
-    print("Loading county parcel data...")
-    county_rows = load_csv(county_path)
-    print(f"  {len(county_rows):,} parcels loaded")
-
-    print("Loading Redfin sold homes data...")
-    sold_rows = load_csv(sold_path)
-    print(f"  {len(sold_rows):,} sold records loaded")
-
-    if not county_rows or not sold_rows:
-        print("Missing input data. Run ingestion scripts first.")
-        sys.exit(1)
-
-    # Index county data by normalized address
-    print("Building address index...")
+def build_county_index(county_rows):
+    """Build an address-indexed lookup from county parcel data."""
     county_by_addr = {}
     for row in county_rows:
         norm = normalize_address(row.get("address", ""))
         if norm:
-            # If multiple parcels share an address, keep the one with the
-            # highest assessed value (likely the primary dwelling)
             existing = county_by_addr.get(norm)
             if existing is None:
                 county_by_addr[norm] = row
@@ -89,79 +67,143 @@ def main():
                         county_by_addr[norm] = row
                 except ValueError:
                     pass
+    return county_by_addr
 
-    print(f"  {len(county_by_addr):,} unique addresses indexed")
 
-    # Join sold homes with county data
-    print("Joining datasets...")
+def join_with_county(redfin_rows, county_by_addr, redfin_fields, label="records"):
+    """Join Redfin rows with county data. Returns (combined_rows, matched, unmatched)."""
     combined = []
     matched = 0
     unmatched = 0
 
-    for sold in sold_rows:
-        norm = normalize_address(sold.get("address", ""))
+    for redfin_row in redfin_rows:
+        norm = normalize_address(redfin_row.get("address", ""))
         county = county_by_addr.get(norm, {})
 
-        row = {
-            # From Redfin sold
-            "address": sold.get("address", ""),
-            "city": sold.get("city", ""),
-            "zip_code": sold.get("zip_code", ""),
-            "sale_price": sold.get("sale_price", ""),
-            "sold_date": sold.get("sold_date", ""),
-            "property_type_redfin": sold.get("property_type", ""),
-            "beds_redfin": sold.get("beds", ""),
-            "baths_redfin": sold.get("baths", ""),
-            "sqft_redfin": sold.get("sqft", ""),
-            "lot_size_sqft_redfin": sold.get("lot_size_sqft", ""),
-            "year_built_redfin": sold.get("year_built", ""),
-            "days_on_market": sold.get("days_on_market", ""),
-            "price_per_sqft": sold.get("price_per_sqft", ""),
-            "hoa_monthly": sold.get("hoa_monthly", ""),
-            "neighborhood_redfin": sold.get("neighborhood", ""),
-            "mls_number": sold.get("mls_number", ""),
-            "latitude": sold.get("latitude", ""),
-            "longitude": sold.get("longitude", ""),
-            "redfin_url": sold.get("redfin_url", ""),
+        row = {}
+        for field_map in redfin_fields:
+            for out_key, in_key in field_map.items():
+                row[out_key] = redfin_row.get(in_key, "")
 
-            # From county
-            "county_matched": "Y" if county else "N",
-            "reid": county.get("reid", ""),
-            "property_type_county": county.get("property_type", ""),
-            "total_assessed": county.get("total_assessed", ""),
-            "building_value": county.get("building_value", ""),
-            "land_value": county.get("land_value", ""),
-            "structure_sqft_county": county.get("structure_sqft", ""),
-            "lot_acres_county": county.get("lot_acres", ""),
-            "bedrooms_county": county.get("bedrooms", ""),
-            "bathrooms_county": county.get("bathrooms", ""),
-            "year_built_county": county.get("year_built", ""),
-            "grade": county.get("grade", ""),
-            "neighborhood_county": county.get("neighborhood", ""),
-            "deed_date": county.get("deed_date", ""),
-        }
+        # County fields
+        row["county_matched"] = "Y" if county else "N"
+        row["reid"] = county.get("reid", "")
+        row["property_type_county"] = county.get("property_type", "")
+        row["total_assessed"] = county.get("total_assessed", "")
+        row["building_value"] = county.get("building_value", "")
+        row["land_value"] = county.get("land_value", "")
+        row["structure_sqft_county"] = county.get("structure_sqft", "")
+        row["lot_acres_county"] = county.get("lot_acres", "")
+        row["bedrooms_county"] = county.get("bedrooms", "")
+        row["bathrooms_county"] = county.get("bathrooms", "")
+        row["year_built_county"] = county.get("year_built", "")
+        row["grade"] = county.get("grade", "")
+        row["neighborhood_county"] = county.get("neighborhood", "")
+        row["deed_date"] = county.get("deed_date", "")
+
         combined.append(row)
-
         if county:
             matched += 1
         else:
             unmatched += 1
 
-    print(f"  Matched: {matched:,} | Unmatched: {unmatched:,} "
-          f"({matched / len(combined) * 100:.1f}% match rate)")
-
-    # Write combined output
     if combined:
-        fieldnames = list(combined[0].keys())
+        rate = matched / len(combined) * 100
+        print(f"  {label}: Matched {matched:,} | Unmatched {unmatched:,} ({rate:.1f}% match rate)")
+
+    return combined
+
+
+def write_combined(rows, output_path, label="records"):
+    """Write combined rows to CSV."""
+    if rows:
+        fieldnames = list(rows[0].keys())
         with open(output_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows(combined)
-        print(f"\nSaved {len(combined):,} records to {output_path}")
+            writer.writerows(rows)
+        print(f"  Saved {len(rows):,} {label} to {output_path}")
     else:
-        print("No records to write.")
+        print(f"  No {label} to write.")
 
-    print("Done.")
+
+# Field mappings for Redfin sold homes
+SOLD_FIELDS = [
+    {
+        "address": "address", "city": "city", "zip_code": "zip_code",
+        "sale_price": "sale_price", "sold_date": "sold_date",
+        "property_type_redfin": "property_type",
+        "beds_redfin": "beds", "baths_redfin": "baths",
+        "sqft_redfin": "sqft", "lot_size_sqft_redfin": "lot_size_sqft",
+        "year_built_redfin": "year_built", "days_on_market": "days_on_market",
+        "price_per_sqft": "price_per_sqft", "hoa_monthly": "hoa_monthly",
+        "neighborhood_redfin": "neighborhood", "mls_number": "mls_number",
+        "latitude": "latitude", "longitude": "longitude",
+        "redfin_url": "redfin_url",
+    },
+]
+
+# Field mappings for Redfin active listings
+ACTIVE_FIELDS = [
+    {
+        "address": "address", "city": "city", "zip_code": "zip_code",
+        "list_price": "list_price",
+        "property_type_redfin": "property_type",
+        "beds_redfin": "beds", "baths_redfin": "baths",
+        "sqft_redfin": "sqft", "lot_size_sqft_redfin": "lot_size_sqft",
+        "year_built_redfin": "year_built", "days_on_market": "days_on_market",
+        "price_per_sqft": "price_per_sqft", "hoa_monthly": "hoa_monthly",
+        "neighborhood_redfin": "neighborhood", "mls_number": "mls_number",
+        "latitude": "latitude", "longitude": "longitude",
+        "redfin_url": "redfin_url",
+        "first_seen": "first_seen", "days_tracked": "days_tracked",
+        "original_price": "original_price", "price_change": "price_change",
+        "price_drop_count": "price_drop_count",
+    },
+]
+
+
+def main():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    data_dir = os.path.join(os.path.dirname(script_dir), "data")
+
+    county_path = os.path.join(data_dir, "county_parcels.csv")
+    sold_path = os.path.join(data_dir, "redfin_sold.csv")
+    active_path = os.path.join(data_dir, "redfin_active.csv")
+    sold_output = os.path.join(data_dir, "combined_properties.csv")
+    active_output = os.path.join(data_dir, "combined_active.csv")
+
+    print("Loading county parcel data...")
+    county_rows = load_csv(county_path)
+    print(f"  {len(county_rows):,} parcels loaded")
+
+    if not county_rows:
+        print("Warning: No county data. Combined files will lack assessed values.")
+
+    # Build address index
+    print("Building address index...")
+    county_by_addr = build_county_index(county_rows)
+    print(f"  {len(county_by_addr):,} unique addresses indexed")
+
+    # Join sold homes
+    print("\nJoining sold homes...")
+    sold_rows = load_csv(sold_path)
+    print(f"  {len(sold_rows):,} sold records loaded")
+    if sold_rows:
+        combined_sold = join_with_county(sold_rows, county_by_addr, SOLD_FIELDS, "sold homes")
+        write_combined(combined_sold, sold_output, "sold records")
+
+    # Join active listings
+    print("\nJoining active listings...")
+    active_rows = load_csv(active_path)
+    if active_rows:
+        print(f"  {len(active_rows):,} active records loaded")
+        combined_active = join_with_county(active_rows, county_by_addr, ACTIVE_FIELDS, "active listings")
+        write_combined(combined_active, active_output, "active records")
+    else:
+        print("  No active listings file found (run ingest_redfin_active.py first)")
+
+    print("\nDone.")
 
 
 if __name__ == "__main__":

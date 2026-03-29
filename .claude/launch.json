@@ -4,8 +4,9 @@
     {
       "name": "dashboard",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8081", "--directory", "."],
-      "port": 8081
+      "runtimeArgs": ["-m", "http.server", "8080", "--directory", "."],
+      "port": 8080,
+      "autoPort": false
     }
   ]
 }

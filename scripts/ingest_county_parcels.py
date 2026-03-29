@@ -13,7 +13,7 @@ import sys
 import time
 import urllib.request
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone
 
 BASE_URL = (
     "https://gcgis.guilfordcountync.gov/arcgis/rest/services/Tax/"
@@ -77,7 +77,7 @@ def convert_epoch_to_date(epoch_ms):
     if epoch_ms is None:
         return None
     try:
-        return datetime.utcfromtimestamp(epoch_ms / 1000).strftime("%Y-%m-%d")
+        return datetime.fromtimestamp(epoch_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
     except (ValueError, OSError):
         return None
 

@@ -17,6 +17,7 @@
     <h1>Greensboro Housing Dashboard</h1>
     <nav class="tab-nav">
       <button class="tab-btn active" data-tab="market-pulse">Market Pulse</button>
+      <button class="tab-btn" data-tab="listings">Listings</button>
       <button class="tab-btn" data-tab="area-compare">Area Compare</button>
       <button class="tab-btn" data-tab="property-explorer">Property Explorer</button>
     </nav>
@@ -27,20 +28,23 @@
     <div class="tab-panel active" id="panel-market-pulse">
       <p class="empty-state">Loading data...</p>
     </div>
+    <div class="tab-panel" id="panel-listings"></div>
     <div class="tab-panel" id="panel-area-compare"></div>
     <div class="tab-panel" id="panel-property-explorer"></div>
   </div>
 
   <!-- Component scripts -->
-  <script src="js/utils.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/market-pulse.js"></script>
-  <script src="js/area-compare.js"></script>
-  <script src="js/property-explorer.js"></script>
+  <script src="js/utils.js?v=2"></script>
+  <script src="js/data.js?v=2"></script>
+  <script src="js/market-pulse.js?v=2"></script>
+  <script src="js/listings.js?v=2"></script>
+  <script src="js/area-compare.js?v=2"></script>
+  <script src="js/property-explorer.js?v=2"></script>
 
   <script>
     const TABS = {
       'market-pulse': { component: MarketPulse, panel: 'panel-market-pulse', loaded: false },
+      'listings': { component: Listings, panel: 'panel-listings', loaded: false },
       'area-compare': { component: AreaCompare, panel: 'panel-area-compare', loaded: false },
       'property-explorer': { component: PropertyExplorer, panel: 'panel-property-explorer', loaded: false },
     };

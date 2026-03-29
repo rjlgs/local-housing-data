@@ -29,9 +29,12 @@ SCRIPT_DIR = PROJECT_ROOT / "scripts"
 INPUT_FILES = {
     "config": PROJECT_ROOT / "config.json",
     "sold": DATA_DIR / "redfin_sold.csv",
+    "active": DATA_DIR / "redfin_active.csv",
     "market_city": DATA_DIR / "redfin_market_city.csv",
     "market_zip": DATA_DIR / "redfin_market_zip.csv",
     "combined": DATA_DIR / "combined_properties.csv",
+    "combined_active": DATA_DIR / "combined_active.csv",
+    "active_tracker": DATA_DIR / "active_listings_tracker.json",
 }
 
 OUTPUT_FILE = DATA_DIR / "dashboard_data.json"
@@ -212,6 +215,72 @@ def parse_combined_csv(path):
         print(f"  Error reading {path.name}: {e}")
 
     return county_data
+
+
+def parse_active_csv(path):
+    """Parse active listings CSV file."""
+    if not path.exists():
+        print(f"Info: {path} not found, skipping active listings")
+        return []
+
+    print(f"Reading {path.name}...")
+    listings = []
+
+    try:
+        with open(path, encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                listing = {
+                    "address": row.get("address", "").strip() or None,
+                    "city": row.get("city", "").strip() or None,
+                    "zip_code": row.get("zip_code", "").strip() or None,
+                    "list_price": safe_numeric(row.get("list_price")),
+                    "beds": safe_numeric(row.get("beds")),
+                    "baths": safe_numeric(row.get("baths")),
+                    "sqft": safe_numeric(row.get("sqft")),
+                    "lot_size_sqft": safe_numeric(row.get("lot_size_sqft")),
+                    "year_built": safe_numeric(row.get("year_built")),
+                    "days_on_market": safe_numeric(row.get("days_on_market")),
+                    "price_per_sqft": safe_numeric(row.get("price_per_sqft")),
+                    "hoa_monthly": safe_numeric(row.get("hoa_monthly")),
+                    "neighborhood": row.get("neighborhood", "").strip() or None,
+                    "property_type": row.get("property_type", "").strip() or None,
+                    "latitude": safe_numeric(row.get("latitude")),
+                    "longitude": safe_numeric(row.get("longitude")),
+                    "redfin_url": row.get("redfin_url", "").strip() or None,
+                    "mls_number": row.get("mls_number", "").strip() or None,
+                    "photo_url": None,
+                    # Tracker-derived fields
+                    "first_seen": row.get("first_seen", "").strip() or None,
+                    "days_tracked": safe_numeric(row.get("days_tracked")),
+                    "original_price": safe_numeric(row.get("original_price")),
+                    "price_change": safe_numeric(row.get("price_change")),
+                    "price_drop_count": safe_numeric(row.get("price_drop_count")),
+                    # County data placeholders
+                    "total_assessed": None,
+                    "building_value": None,
+                    "land_value": None,
+                    "grade": None,
+                }
+                listings.append(listing)
+
+        print(f"  Processed {len(listings)} active listings")
+    except Exception as e:
+        print(f"  Error reading {path.name}: {e}")
+
+    return listings
+
+
+def enrich_active_listings(listings, county_data):
+    """Enrich active listings with county data."""
+    enriched_count = 0
+    for listing in listings:
+        address = listing["address"]
+        if address in county_data:
+            listing.update(county_data[address])
+            enriched_count += 1
+    print(f"  Enriched {enriched_count} active listings with county data")
+    return listings
 
 
 def enrich_sold_homes(homes, county_data):
@@ -429,9 +498,23 @@ def main():
     county_data = parse_combined_csv(INPUT_FILES["combined"])
     homes = enrich_sold_homes(homes, county_data)
 
+    # Parse active listings
+    print("\nParsing active listings...")
+    active_listings = parse_active_csv(INPUT_FILES["active"])
+
+    # Parse county data for active listings enrichment
+    print("\nParsing county data for active listings...")
+    active_county = parse_combined_csv(INPUT_FILES["combined_active"])
+    if active_listings:
+        active_listings = enrich_active_listings(active_listings, active_county)
+
     # Fetch property photos from Redfin listing pages
-    print("\nFetching property photos...")
+    print("\nFetching property photos (sold)...")
     homes = fetch_photo_urls(homes)
+
+    if active_listings:
+        print("\nFetching property photos (active)...")
+        active_listings = fetch_photo_urls(active_listings)
 
     # Read sold window metadata written by ingest_redfin_sold.py
     sold_meta_path = DATA_DIR / "redfin_sold_meta.json"
@@ -452,15 +535,21 @@ def main():
     market_trends, zip_areas = build_market_trends(config, market_data, homes)
     print(f"  Included {len(market_trends)} market areas, {len(zip_areas)} zip areas")
 
+    # Data freshness from pipeline state
+    import pipeline_state
+    data_freshness = pipeline_state.get_freshness()
+
     # Assemble output
     print("\nAssembling output...")
     output = {
         "generated_at": datetime.now().isoformat(),
+        "data_freshness": data_freshness,
         "config": config,
         "sold_window_days": sold_window_days,
         "market_trends": market_trends,
         "zip_areas": zip_areas,
         "sold_homes": homes,
+        "active_listings": active_listings,
         "area_summary": area_summary,
     }
 
@@ -477,6 +566,7 @@ def main():
     print(f"Output file: {OUTPUT_FILE}")
     print(f"Generated at: {output['generated_at']}")
     print(f"Sold homes: {len(homes)}")
+    print(f"Active listings: {len(active_listings)}")
     print(f"Market areas: {len(market_trends)}")
     print(f"Focus areas with summaries: {len(area_summary)}")
     print("=" * 60)

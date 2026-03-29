@@ -12,6 +12,19 @@ const Utils = {
     }).format(value);
   },
 
+  formatDate(value) {
+    if (!value) return '—';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value; // already YYYY-MM-DD
+    // "Month-D-YYYY" → replace hyphens with spaces so Date can parse it
+    const normalized = /^[A-Za-z]/.test(value) ? value.replace(/-/g, ' ') : value;
+    const d = new Date(normalized);
+    if (isNaN(d)) return value; // unparseable — return raw
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  },
+
   formatNumber(value, decimals = 0) {
     if (value == null) return '—';
     return new Intl.NumberFormat('en-US', {

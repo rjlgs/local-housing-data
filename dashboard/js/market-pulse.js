@@ -26,6 +26,7 @@ const MarketPulse = {
         <div class="tab-title-row">
           <h2>Market Pulse</h2>
           <button id="mp-learn-more" class="btn-learn-more">Learn More</button>
+          ${data.data_freshness && data.data_freshness.market_trends ? `<span class="freshness-badge">Trend data updated ${this._formatAge(data.data_freshness.market_trends)}</span>` : ''}
         </div>
         <p class="subtitle">Is now a good time to buy? Track key market indicators over time.</p>
       </div>
@@ -45,24 +46,11 @@ const MarketPulse = {
         </div>
       </div>
       <div class="controls">
-        <label>Areas:</label>
-        <div id="mp-area-select" class="multiselect">
-          <button type="button" class="multiselect-trigger" id="mp-area-trigger">
-            <span class="multiselect-label">Select areas...</span>
-            <span class="multiselect-arrow">&#9662;</span>
-          </button>
-          <div class="multiselect-dropdown" id="mp-area-dropdown">
-            <div class="multiselect-search-wrap">
-              <input type="text" class="multiselect-search" id="mp-area-search" placeholder="Filter..." autocomplete="off" />
-            </div>
-            <div class="multiselect-actions">
-              <button type="button" id="mp-select-all">Select All</button>
-            </div>
-            <div class="multiselect-options" id="mp-area-options"></div>
-          </div>
-        </div>
         <div class="zipmap-wrap" id="mp-zipmap-wrap">
-          <button type="button" class="zipmap-btn" id="mp-zipmap-btn" title="Select areas on map">&#9881; Map</button>
+          <button type="button" class="zipmap-btn" id="mp-zipmap-btn" title="Select areas on map">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="flex-shrink:0"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+            Select using map
+          </button>
           <div class="zipmap-popover" id="mp-zipmap-popover">
             <div class="zipmap-header">
               <span>Click zip codes to toggle</span>
@@ -109,9 +97,6 @@ const MarketPulse = {
       ? new Set(savedAreas.filter(k => allAreas.some(a => a.key === k)))
       : new Set(trends['Greensboro'] ? ['Greensboro'] : []);
 
-    // Populate multi-select
-    this._initMultiSelect(allAreas, trends);
-
     // Zip map popover
     this._initZipMap(allAreas, trends);
 
@@ -147,6 +132,18 @@ const MarketPulse = {
     this._renderBuyerScore(trends, allAreas);
   },
 
+  _formatAge(isoString) {
+    try {
+      const then = new Date(isoString);
+      const now = new Date();
+      const hours = Math.floor((now - then) / 3600000);
+      if (hours < 1) return 'just now';
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.floor(hours / 24);
+      return `${days}d ago`;
+    } catch { return 'unknown'; }
+  },
+
   _buildAreaList(zipAreas, trends) {
     const areas = [];
     let colorIdx = 0;
@@ -175,109 +172,6 @@ const MarketPulse = {
     });
 
     return areas;
-  },
-
-  _initMultiSelect(allAreas, trends) {
-    const trigger = document.getElementById('mp-area-trigger');
-    const dropdown = document.getElementById('mp-area-dropdown');
-    const optionsContainer = document.getElementById('mp-area-options');
-    const searchInput = document.getElementById('mp-area-search');
-
-    // Build option elements
-    allAreas.forEach(area => {
-      const opt = document.createElement('label');
-      opt.className = 'multiselect-option';
-      opt.dataset.key = area.key;
-      opt.dataset.search = area.label.toLowerCase();
-
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = this._activeAreas.has(area.key);
-
-      const swatch = document.createElement('span');
-      swatch.className = 'multiselect-swatch';
-      swatch.style.background = area.color;
-
-      const text = document.createElement('span');
-      text.textContent = area.label;
-
-      opt.appendChild(cb);
-      opt.appendChild(swatch);
-      opt.appendChild(text);
-      optionsContainer.appendChild(opt);
-
-      cb.addEventListener('change', () => {
-        if (cb.checked) {
-          this._activeAreas.add(area.key);
-        } else {
-          if (this._activeAreas.size <= 1) { cb.checked = true; return; }
-          this._activeAreas.delete(area.key);
-        }
-        Prefs.set('mp.activeAreas', [...this._activeAreas]);
-        this._updateTriggerLabel(allAreas);
-        this._syncMapStyles();
-        this._renderCharts(trends, allAreas);
-        this._renderBuyerScore(trends, allAreas);
-      });
-    });
-
-    this._updateTriggerLabel(allAreas);
-
-    // Toggle dropdown
-    trigger.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const isOpen = dropdown.classList.toggle('open');
-      if (isOpen) {
-        searchInput.value = '';
-        this._filterOptions('');
-        searchInput.focus();
-      }
-    });
-
-    // Close on outside click
-    document.addEventListener('click', (e) => {
-      if (!e.target.closest('#mp-area-select')) {
-        dropdown.classList.remove('open');
-      }
-    });
-
-    // Search filter
-    searchInput.addEventListener('input', () => {
-      this._filterOptions(searchInput.value.toLowerCase());
-    });
-
-    // Select All / Deselect All
-    document.getElementById('mp-select-all').addEventListener('click', () => {
-      allAreas.forEach(a => this._activeAreas.add(a.key));
-      optionsContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
-      Prefs.set('mp.activeAreas', [...this._activeAreas]);
-      this._updateTriggerLabel(allAreas);
-      this._syncMapStyles();
-      this._renderCharts(trends, allAreas);
-      this._renderBuyerScore(trends, allAreas);
-    });
-
-  },
-
-  _filterOptions(query) {
-    document.querySelectorAll('#mp-area-options .multiselect-option').forEach(opt => {
-      opt.style.display = opt.dataset.search.includes(query) ? '' : 'none';
-    });
-  },
-
-  _updateTriggerLabel(allAreas) {
-    const label = document.querySelector('#mp-area-trigger .multiselect-label');
-    const count = this._activeAreas.size;
-    if (count === 0) {
-      label.textContent = 'Select areas...';
-    } else if (count === 1) {
-      const area = allAreas.find(a => this._activeAreas.has(a.key));
-      label.textContent = area ? area.label : '1 selected';
-    } else if (count === allAreas.length) {
-      label.textContent = 'All areas selected';
-    } else {
-      label.textContent = `${count} areas selected`;
-    }
   },
 
   _initZipMap(allAreas, trends) {
@@ -357,10 +251,6 @@ const MarketPulse = {
                   this._activeAreas.add(zipKey);
                 }
                 Prefs.set('mp.activeAreas', [...this._activeAreas]);
-                // Sync checkbox
-                const cb = document.querySelector(`#mp-area-options .multiselect-option[data-key="${CSS.escape(zipKey)}"] input`);
-                if (cb) cb.checked = this._activeAreas.has(zipKey);
-                this._updateTriggerLabel(allAreas);
                 syncMapStyles();
                 this._renderCharts(trends, allAreas);
                 this._renderBuyerScore(trends, allAreas);

@@ -35,6 +35,7 @@ const AreaCompare = {
           ${dateRangeNote ? `<span class="date-range-badge">${dateRangeNote}</span>` : ''}
         </div>
         <p class="subtitle">Compare your focus areas side by side on price, size, and value.</p>
+        ${data.data_freshness && data.data_freshness.sold_homes ? `<span class="freshness-badge">Sold data updated ${this._formatAge(data.data_freshness.sold_homes)}</span>` : ''}
       </div>
       <div id="ac-modal" class="modal-overlay" style="display:none">
         <div class="modal-content">
@@ -113,6 +114,18 @@ const AreaCompare = {
     this._renderBarCharts(summary, focusAreas);
     this._renderScatter(homes, focusAreas);
     this._renderAssessedVsSale(homes, focusAreas);
+  },
+
+  _formatAge(isoString) {
+    try {
+      const then = new Date(isoString);
+      const now = new Date();
+      const hours = Math.floor((now - then) / 3600000);
+      if (hours < 1) return 'just now';
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.floor(hours / 24);
+      return `${days}d ago`;
+    } catch { return 'unknown'; }
   },
 
   _renderTable(summary, focusAreas) {
