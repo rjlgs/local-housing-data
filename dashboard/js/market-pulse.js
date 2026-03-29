@@ -15,6 +15,7 @@ const MarketPulse = {
   init(container, data) {
     const trends = data.market_trends;
     const zipAreas = data.zip_areas || [];
+    const baselineCity = (data.config && data.config.metro && data.config.metro.baseline_city) || '';
     const trendOptions = Utils.TREND_TYPES.map(t =>
       `<option value="${t}">${Utils.TREND_LABELS[t]}</option>`
     ).join('');
@@ -89,13 +90,14 @@ const MarketPulse = {
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
 
     // Build the area options list
+    this._baselineCity = baselineCity;
     const allAreas = this._buildAreaList(zipAreas, trends);
 
-    // Restore saved active areas, or default to Greensboro metro
+    // Restore saved active areas, or default to baseline city
     const savedAreas = Prefs.get('mp.activeAreas');
     this._activeAreas = savedAreas
       ? new Set(savedAreas.filter(k => allAreas.some(a => a.key === k)))
-      : new Set(trends['Greensboro'] ? ['Greensboro'] : []);
+      : new Set(trends[baselineCity] ? [baselineCity] : []);
 
     // Zip map popover
     this._initZipMap(allAreas, trends);
@@ -136,11 +138,12 @@ const MarketPulse = {
     const areas = [];
     let colorIdx = 0;
 
-    // Greensboro metro baseline
-    if (trends['Greensboro']) {
+    // Metro baseline city
+    const bc = this._baselineCity;
+    if (bc && trends[bc]) {
       areas.push({
-        key: 'Greensboro',
-        label: 'Greensboro (Metro)',
+        key: bc,
+        label: `${bc} (Metro)`,
         color: Utils.baselineColor,
         dash: 'solid',
       });
@@ -462,18 +465,19 @@ const MarketPulse = {
     const container = document.getElementById('buyer-score-card');
 
     // Metro score with full breakdown + history
-    const gsoRecords = trends['Greensboro'] || [];
+    const bc = this._baselineCity;
+    const baseRecords = (bc && trends[bc]) || [];
     const metroHtml = this._renderScoreCard(
-      this._computeScore(gsoRecords),
-      'Buyer Favorability Score (Greensboro Metro)',
+      this._computeScore(baseRecords),
+      `Buyer Favorability Score (${bc || 'Metro'})`,
       true,
-      gsoRecords
+      baseRecords
     );
 
     // Per-area scores (compact — no breakdown)
     const periods = [3, 6, 12, 24];
     const areaScores = allAreas
-      .filter(a => a.key !== 'Greensboro' && this._activeAreas.has(a.key) && trends[a.key] && trends[a.key].length > 0)
+      .filter(a => a.key !== bc && this._activeAreas.has(a.key) && trends[a.key] && trends[a.key].length > 0)
       .map(a => ({ area: a, score: this._computeScore(trends[a.key]), records: trends[a.key] }))
       .filter(s => s.score);
 
@@ -515,7 +519,7 @@ const MarketPulse = {
     // Build score data for active non-metro zip areas
     const scoreData = {};
     allAreas.forEach(a => {
-      if (a.key === 'Greensboro' || !this._activeAreas.has(a.key)) return;
+      if (a.key === this._baselineCity || !this._activeAreas.has(a.key)) return;
       const records = trends[a.key];
       if (records && records.length > 0) {
         scoreData[a.key] = { score: this._computeScore(records), records };

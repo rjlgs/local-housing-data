@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Ingest currently active for-sale listings from Redfin for the Greensboro metro.
+Ingest currently active for-sale listings from Redfin for the configured metro.
 
 Uses the same Redfin gis-csv endpoint as ingest_redfin_sold.py but with
 status=1 (active for sale). Splits requests by city, property type, and
@@ -23,39 +23,6 @@ from datetime import datetime, date
 BASE_URL = "https://www.redfin.com/stingray/api/gis-csv"
 
 REGION_TYPE = "6"  # city/place
-
-# Same metro cities as ingest_redfin_sold.py
-METRO_CITIES = [
-    ("7161", "Greensboro"),
-    ("35795", "High Point"),
-    ("16806", "Summerfield"),
-    ("8762", "Jamestown"),
-    ("13593", "Pleasant Garden"),
-    ("16677", "Stokesdale"),
-    ("12395", "Oak Ridge"),
-    ("445", "Archdale"),
-    ("6669", "Gibsonville"),
-    ("18762", "Whitsett"),
-    ("23768", "McLeansville"),
-    ("15539", "Sedalia"),
-    ("22653", "Forest Oaks"),
-    ("14471", "Reidsville"),
-    ("5177", "Eden"),
-    ("2348", "Burlington"),
-    ("537", "Asheboro"),
-    ("14266", "Randleman"),
-    ("17528", "Trinity"),
-    ("9676", "Liberty"),
-    ("10348", "Madison"),
-    ("10706", "Mayodan"),
-    ("14253", "Ramseur"),
-    ("15519", "Seagrove"),
-    ("16512", "Staley"),
-    ("16694", "Stoneville"),
-    ("18359", "Wentworth"),
-    ("34317", "Ruffin"),
-    ("6368", "Franklinville"),
-]
 
 # Property type groups to iterate (same as sold script)
 PROPERTY_TYPE_GROUPS = [
@@ -98,11 +65,11 @@ COLUMN_MAP = {
 }
 
 
-def fetch_active(region_id, uipt, min_price=None, max_price=None):
+def fetch_active(region_id, uipt, market_slug, min_price=None, max_price=None):
     """Fetch active listings CSV for a city + property type group + price band."""
     params = {
         "al": "1",
-        "market": "greensboro",
+        "market": market_slug,
         "num_homes": "350",
         "ord": "redfin-recommended-asc",
         "page_number": "1",
@@ -138,13 +105,13 @@ def fetch_active(region_id, uipt, min_price=None, max_price=None):
     return rows
 
 
-def fetch_city(region_id, city_name, seen):
+def fetch_city(region_id, city_name, seen, market_slug):
     """Fetch all active listings for a city, splitting by property type and price band."""
     city_rows = []
 
     for label, uipt in PROPERTY_TYPE_GROUPS:
         try:
-            rows = fetch_active(region_id, uipt)
+            rows = fetch_active(region_id, uipt, market_slug)
         except Exception as e:
             print(f"    ERROR ({label}): {e}")
             continue
@@ -155,7 +122,7 @@ def fetch_city(region_id, city_name, seen):
             for min_p, max_p in PRICE_BANDS:
                 band_label = f"${min_p or 0}-${max_p or '+'}"
                 try:
-                    band_rows = fetch_active(region_id, uipt, min_p, max_p)
+                    band_rows = fetch_active(region_id, uipt, market_slug, min_p, max_p)
                 except Exception as e:
                     print(f"    ERROR ({label}, {band_label}): {e}")
                     continue
@@ -275,21 +242,27 @@ def enrich_from_tracker(rows, tracker, today_str):
 
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.join(os.path.dirname(script_dir), "data")
+    project_root = os.path.dirname(script_dir)
+    data_dir = os.path.join(project_root, "data")
     os.makedirs(data_dir, exist_ok=True)
     output_path = os.path.join(data_dir, "redfin_active.csv")
     tracker_path = os.path.join(data_dir, "active_listings_tracker.json")
 
+    with open(os.path.join(project_root, "config.json")) as f:
+        config = json.load(f)
+    metro_cities = [(c["region_id"], c["name"]) for c in config["cities"]]
+    market_slug = config["metro"]["redfin_market_slug"]
+
     today_str = date.today().isoformat()
 
-    print(f"Fetching active listings across {len(METRO_CITIES)} metro cities...\n")
+    print(f"Fetching active listings across {len(metro_cities)} metro cities...\n")
 
     all_rows = []
     seen = set()
 
-    for region_id, city_name in METRO_CITIES:
+    for region_id, city_name in metro_cities:
         print(f"  {city_name}...", end=" ", flush=True)
-        city_rows = fetch_city(region_id, city_name, seen)
+        city_rows = fetch_city(region_id, city_name, seen, market_slug)
         print(f"{len(city_rows)} active")
         all_rows.extend(city_rows)
         time.sleep(0.5)

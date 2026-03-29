@@ -50,7 +50,7 @@ const AreaCompare = {
           <h4>Data sources</h4>
           <ul>
             <li><strong>Sale data:</strong> Redfin sold listings API (last ~90 days)</li>
-            <li><strong>Assessed values:</strong> Guilford County ArcGIS parcel data</li>
+            <li><strong>Assessed values:</strong> County ArcGIS parcel data</li>
           </ul>
         </div>
       </div>

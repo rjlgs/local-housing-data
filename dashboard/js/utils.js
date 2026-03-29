@@ -215,7 +215,7 @@ const MapUtils = {
     return this._geojsonPromise;
   },
 
-  createMap(elementId, dataPoints, defaultCenter) {
+  createMap(elementId, dataPoints, defaultCenter, defaultZoom) {
     const pts = (dataPoints || []).filter(h => h.latitude != null && h.longitude != null);
     let center = defaultCenter || [36.07, -79.79];
     if (pts.length > 0) {
@@ -224,7 +224,7 @@ const MapUtils = {
         pts.reduce((s, h) => s + h.longitude, 0) / pts.length,
       ];
     }
-    const map = L.map(elementId).setView(center, 11);
+    const map = L.map(elementId).setView(center, defaultZoom || 11);
     L.tileLayer(this.TILE_URL, { attribution: this.TILE_ATTR, maxZoom: 19 }).addTo(map);
     return map;
   },

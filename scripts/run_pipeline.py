@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Single entry point for the Greensboro housing data pipeline.
+Single entry point for the housing data pipeline.
 
 Supports tiered updates so different data sources can refresh independently:
-  - county_parcels:   Guilford County ArcGIS (~10 min, every ~2 weeks)
+  - county_parcels:   County ArcGIS (~10 min, every ~2 weeks)
   - market_trends:    Redfin S3 bulk data (~3 min, every ~2 weeks)
   - sold_homes:       Redfin sold CSV (~1 min, daily)
   - active_listings:  Redfin active CSV (~1 min, twice daily)
@@ -20,6 +20,7 @@ Usage:
 """
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -35,21 +36,21 @@ TIER_STEPS = {
         {
             "name": "County Parcels",
             "script": "ingest_county_parcels.py",
-            "description": "Guilford County property characteristics (~222K parcels via ArcGIS)",
+            "description": "County property characteristics via ArcGIS",
         },
     ],
     "market_trends": [
         {
             "name": "Redfin Market Data",
             "script": "ingest_redfin_market.py",
-            "description": "City + zip-level market trends for Greensboro metro (Redfin S3)",
+            "description": "City + zip-level market trends (Redfin S3)",
         },
     ],
     "sold_homes": [
         {
             "name": "Redfin Sold Homes",
             "script": "ingest_redfin_sold.py",
-            "description": "Individual sold-home transactions across 29 metro cities (Redfin CSV)",
+            "description": "Individual sold-home transactions across metro cities (Redfin CSV)",
             "extra_args_key": "sold_days",
         },
     ],
@@ -140,7 +141,7 @@ def resolve_tiers(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run the Greensboro housing data pipeline."
+        description="Run the housing data pipeline."
     )
     parser.add_argument(
         "--tier", type=str, default=None,
@@ -160,8 +161,14 @@ def main():
     )
     args = parser.parse_args()
 
+    # Load config for metro name in banner
+    config_path = os.path.join(os.path.dirname(SCRIPT_DIR), "config.json")
+    with open(config_path) as f:
+        config = json.load(f)
+    metro_name = config.get("metro", {}).get("name", "Housing Data")
+
     print("=" * 60)
-    print("  Greensboro Housing Data Pipeline")
+    print(f"  {metro_name} Housing Data Pipeline")
     print("=" * 60)
     print()
 

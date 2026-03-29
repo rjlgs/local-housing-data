@@ -37,6 +37,7 @@ const PropertyExplorer = {
 
   init(container, data) {
     this._allHomes = data.sold_homes;
+    this._metro = data.config.metro || {};
     this._focusAreas = data.config.focus_areas;
     const focusAreas = this._focusAreas;
 
@@ -53,7 +54,7 @@ const PropertyExplorer = {
         <div class="modal-content">
           <button class="modal-close" id="pe-modal-close">&times;</button>
           <h3>About Property Explorer Data</h3>
-          <p>Property Explorer shows <strong>individual recently sold homes</strong> pulled from Redfin's sold listings API. By default, this covers the last ~90 days of sales across ${data.config.focus_areas.length} focus areas in the Greensboro-High Point metro.</p>
+          <p>Property Explorer shows <strong>individual recently sold homes</strong> pulled from Redfin's sold listings API. By default, this covers the last ~90 days of sales across ${data.config.focus_areas.length} focus areas in the ${this._metro.name || ''} metro.</p>
           <h4>Filtering</h4>
           <p>Use the dropdown filters to narrow by area, bedrooms, bathrooms, square footage, price, and property type. For areas with polygon boundaries (like Irving Park and Sunset Hills), filtering uses <strong>spatial matching</strong> — a home is included only if its coordinates fall within the defined boundary.</p>
           <h4>Custom polygon drawing</h4>
@@ -63,7 +64,7 @@ const PropertyExplorer = {
           <h4>Data sources</h4>
           <ul>
             <li><strong>Sale data:</strong> Redfin sold listings API (last ~90 days)</li>
-            <li><strong>Assessed values &amp; property details:</strong> Guilford County ArcGIS parcel data, joined by address</li>
+            <li><strong>Assessed values &amp; property details:</strong> County ArcGIS parcel data, joined by address</li>
           </ul>
         </div>
       </div>
@@ -211,7 +212,7 @@ const PropertyExplorer = {
   },
 
   _initMap() {
-    this._map = MapUtils.createMap('explorer-map', this._allHomes);
+    this._map = MapUtils.createMap('explorer-map', this._allHomes, this._metro.map_center, this._metro.map_zoom);
     this._areaPolygonsLayer = L.featureGroup().addTo(this._map);
     this._drawnItems = L.featureGroup().addTo(this._map);
     this._markersLayer = L.layerGroup().addTo(this._map);
@@ -448,6 +449,6 @@ const PropertyExplorer = {
   _hidePhoto() { MapUtils.hidePhoto(this._photoTooltip, this._photoTimeout); },
 
   _zillowUrl(h) {
-    return `https://www.zillow.com/homes/${[h.address, h.city, 'NC', h.zip_code].filter(Boolean).join(' ').replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '-')}_rb/`;
+    return `https://www.zillow.com/homes/${[h.address, h.city, this._metro.state_code || '', h.zip_code].filter(Boolean).join(' ').replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '-')}_rb/`;
   },
 };
