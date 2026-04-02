@@ -374,6 +374,7 @@ const Listings = {
       return `
         <tr class="clickable-row" data-addr="${(h.address || '').replace(/"/g, '&quot;')}">
           <td><button class="btn-fav${isFav ? ' active' : ''}" data-fav-addr="${(h.address || '').replace(/"/g, '&quot;')}" title="${isFav ? 'Remove from favorites' : 'Add to favorites'}">${isFav ? '&#9733;' : '&#9734;'}</button></td>
+          ${MapUtils.PHOTO_BTN_HTML}
           <td>${Utils.formatDate(h.first_seen)} ${badges.join(' ')}</td>
           <td class="addr-cell"><a href="${h.redfin_url || '#'}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${h.address || '\u2014'}</a></td>
           <td>${h.city || '\u2014'}</td>
@@ -392,7 +393,7 @@ const Listings = {
     }).join('');
 
     document.getElementById('ls-results-table-wrap').innerHTML = `
-      <table class="data-table"><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table>
+      <table class="data-table"><thead><tr><th class="photo-preview-cell"></th>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table>
       ${listings.length > 200 ? `<p class="table-note">Showing 200 of ${listings.length} results</p>` : ''}
     `;
 
@@ -506,9 +507,10 @@ const Listings = {
       <div id="ls-comp-map" class="comp-map"></div>
       ${comps.length > 0 ? `
         <table class="data-table comp-table"><thead><tr>
-          <th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
+          <th class="photo-preview-cell"></th><th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
         </tr></thead><tbody>
           ${comps.slice(0, 15).map(c => `<tr>
+            ${MapUtils.PHOTO_BTN_HTML}
             <td>${Utils.formatDate(c.sold_date)}</td>
             <td class="addr-cell"><a href="${c.redfin_url || '#'}" target="_blank" rel="noopener">${c.address}</a></td>
             <td>${Utils.formatCurrency(c.sale_price)}</td>

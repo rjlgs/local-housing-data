@@ -210,6 +210,8 @@ const MapUtils = {
   TILE_URL: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
   TILE_ATTR: '&copy; OpenStreetMap contributors',
 
+  PHOTO_BTN_HTML: '<td class="photo-preview-cell"><button class="photo-preview-btn" aria-label="Preview photos" onclick="event.stopPropagation()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button></td>',
+
   _geojsonPromise: null,
   _geojsonCache: null,
 
@@ -348,20 +350,45 @@ const MapUtils = {
     const { rows, items, markersByAddr, showPhoto, hidePhoto, onRowClick, defaultOpacity } = opts;
     const rowEls = typeof rows === 'string' ? document.querySelectorAll(rows) : rows;
     const restoreOpacity = defaultOpacity || 0.6;
+    const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     rowEls.forEach((tr, i) => {
       const addr = tr.dataset.addr;
       const item = addr ? items.find(h => h.address === addr) : items[i];
       if (!item) return;
-      tr.addEventListener('mouseenter', (e) => {
-        const m = markersByAddr[item.address];
-        if (m) { m.setRadius(9); m.setStyle({ fillOpacity: 0.95 }); m.bringToFront(); }
-        showPhoto(item, e.clientX, e.clientY);
-      });
-      tr.addEventListener('mouseleave', () => {
-        const m = markersByAddr[item.address];
-        if (m) { m.setRadius(5); m.setStyle({ fillOpacity: restoreOpacity }); }
-        hidePhoto();
-      });
+      if (isTouch) {
+        // On touch devices, use the camera button for photo preview
+        // instead of hover (mouseenter/mouseleave interfere with tap)
+        tr.addEventListener('mouseenter', () => {
+          const m = markersByAddr[item.address];
+          if (m) { m.setRadius(9); m.setStyle({ fillOpacity: 0.95 }); m.bringToFront(); }
+        });
+        tr.addEventListener('mouseleave', () => {
+          const m = markersByAddr[item.address];
+          if (m) { m.setRadius(5); m.setStyle({ fillOpacity: restoreOpacity }); }
+        });
+        const btn = tr.querySelector('.photo-preview-btn');
+        if (btn) {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            hidePhoto();
+            document.querySelectorAll('.photo-preview-btn.active').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const rect = btn.getBoundingClientRect();
+            showPhoto(item, rect.left, rect.top);
+          });
+        }
+      } else {
+        tr.addEventListener('mouseenter', (e) => {
+          const m = markersByAddr[item.address];
+          if (m) { m.setRadius(9); m.setStyle({ fillOpacity: 0.95 }); m.bringToFront(); }
+          showPhoto(item, e.clientX, e.clientY);
+        });
+        tr.addEventListener('mouseleave', () => {
+          const m = markersByAddr[item.address];
+          if (m) { m.setRadius(5); m.setStyle({ fillOpacity: restoreOpacity }); }
+          hidePhoto();
+        });
+      }
       if (onRowClick) {
         tr.addEventListener('click', () => onRowClick(item));
       }
@@ -489,7 +516,8 @@ const MapUtils = {
   createPhotoTooltip() {
     const el = document.createElement('div');
     el.className = 'photo-tooltip';
-    el.innerHTML = `<div class="photo-tooltip-carousel-wrap">
+    el.innerHTML = `<button class="photo-tooltip-close" aria-label="Close preview">&times;</button>
+      <div class="photo-tooltip-carousel-wrap">
         <img class="photo-tooltip-img" src="" alt="">
         <span class="photo-tooltip-cycle-counter"></span>
       </div>
@@ -500,6 +528,13 @@ const MapUtils = {
         <div class="photo-tooltip-location"></div>
       </div>`;
     el.style.display = 'none';
+    el.querySelector('.photo-tooltip-close').addEventListener('click', (e) => {
+      e.stopPropagation();
+      clearInterval(el._cycleTimer);
+      el._cycleTimer = null;
+      el.style.display = 'none';
+      document.querySelectorAll('.photo-preview-btn.active').forEach(b => b.classList.remove('active'));
+    });
     document.body.appendChild(el);
     return el;
   },
@@ -544,14 +579,22 @@ const MapUtils = {
       tooltip.querySelector('.photo-tooltip-specs').textContent = specs;
       tooltip.querySelector('.photo-tooltip-location').textContent =
         [home.neighborhood, home.city, home.zip_code].filter(Boolean).join(' ');
-      const tw = Math.min(340, window.innerWidth * 0.85), th = 300;
-      let left = x + 16, top = y - th / 2;
-      if (left + tw > window.innerWidth - 10) left = x - tw - 16;
-      if (left < 5) left = 5;
-      if (top < 10) top = 10;
-      if (top + th > window.innerHeight - 10) top = window.innerHeight - th - 10;
-      tooltip.style.left = left + 'px';
-      tooltip.style.top = top + 'px';
+      const tw = Math.min(340, window.innerWidth * 0.85);
+      const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      if (isTouch) {
+        tooltip.style.left = ((window.innerWidth - tw) / 2) + 'px';
+        tooltip.style.top = Math.max(10, window.innerHeight * 0.1) + 'px';
+        tooltip.style.width = tw + 'px';
+      } else {
+        const th = 300;
+        let left = x + 16, top = y - th / 2;
+        if (left + tw > window.innerWidth - 10) left = x - tw - 16;
+        if (left < 5) left = 5;
+        if (top < 10) top = 10;
+        if (top + th > window.innerHeight - 10) top = window.innerHeight - th - 10;
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = top + 'px';
+      }
       tooltip.style.display = 'block';
     }, 300);
   },
@@ -898,6 +941,16 @@ if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
       });
       scoreItem.classList.toggle('touch-active');
       return;
+    }
+
+    // Dismiss photo tooltip when tapping outside
+    if (!e.target.closest('.photo-tooltip') && !e.target.closest('.photo-preview-btn')) {
+      document.querySelectorAll('.photo-tooltip').forEach(el => {
+        clearInterval(el._cycleTimer);
+        el._cycleTimer = null;
+        el.style.display = 'none';
+      });
+      document.querySelectorAll('.photo-preview-btn.active').forEach(b => b.classList.remove('active'));
     }
 
     // Dismiss all touch tooltips when tapping elsewhere
