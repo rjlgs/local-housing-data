@@ -309,6 +309,7 @@ const PropertyExplorer = {
 
     const rowsHtml = display.map(h => `
       <tr class="clickable-row" data-addr="${(h.address || '').replace(/"/g, '&quot;')}">
+        ${MapUtils.PHOTO_BTN_HTML}
         <td>${Utils.formatDate(h.sold_date)}</td>
         <td class="addr-cell"><a href="${this._zillowUrl(h)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${h.address || '—'}</a></td>
         <td>${h.city || '—'}</td>
@@ -331,7 +332,7 @@ const PropertyExplorer = {
     `).join('');
 
     document.getElementById('results-table-wrap').innerHTML = `
-      <table class="data-table"><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table>
+      <table class="data-table"><thead><tr><th class="photo-preview-cell"></th>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table>
       ${homes.length > 200 ? `<p class="table-note">Showing 200 of ${homes.length} results</p>` : ''}
     `;
 
@@ -395,9 +396,10 @@ const PropertyExplorer = {
       <div id="comp-hover-map" class="comp-map"></div>
       ${comps.length > 0 ? `
         <table class="data-table comp-table"><thead><tr>
-          <th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
+          <th class="photo-preview-cell"></th><th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
         </tr></thead><tbody>
           ${comps.slice(0, 15).map(c => `<tr>
+            ${MapUtils.PHOTO_BTN_HTML}
             <td>${Utils.formatDate(c.sold_date)}</td>
             <td><a href="${this._zillowUrl(c)}" target="_blank" rel="noopener">${c.address}</a></td>
             <td>${Utils.formatCurrency(c.sale_price)}</td>

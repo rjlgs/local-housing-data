@@ -1167,6 +1167,15 @@ body {
   text-overflow: ellipsis;
 }
 
+/* Camera preview button & tooltip close — hidden on desktop */
+.photo-preview-cell {
+  display: none;
+}
+
+.photo-tooltip-close {
+  display: none;
+}
+
 /* ============================================================
    MOBILE / RESPONSIVE
    ============================================================ */
@@ -1671,5 +1680,62 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  /* Photo preview button — visible on touch devices */
+  .photo-preview-cell {
+    display: table-cell;
+    width: 28px;
+    padding: 0 2px !important;
+    vertical-align: middle;
+    text-align: center;
+  }
+
+  .photo-preview-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    min-height: 44px;
+    min-width: 44px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: var(--radius);
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .photo-preview-btn:active,
+  .photo-preview-btn.active {
+    color: var(--primary);
+  }
+
+  /* Photo tooltip on touch: allow taps, show close button */
+  .photo-tooltip {
+    pointer-events: auto;
+  }
+
+  .photo-tooltip-close {
+    display: flex;
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 1;
+    width: 28px;
+    height: 28px;
+    min-height: 44px;
+    min-width: 44px;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    font-size: 1.25rem;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
 }
