@@ -790,6 +790,89 @@ const Prefs = {
   },
 };
 
+// --- Favorites (localStorage persistence) ---
+const FavoritesStore = {
+  _storageKey: 'housing-favorites',
+  _cache: null,
+
+  _load() {
+    if (this._cache) return this._cache;
+    try {
+      const raw = localStorage.getItem(this._storageKey);
+      this._cache = raw ? JSON.parse(raw) : {};
+    } catch {
+      this._cache = {};
+    }
+    return this._cache;
+  },
+
+  _save() {
+    try { localStorage.setItem(this._storageKey, JSON.stringify(this._load())); } catch {}
+  },
+
+  getAll() { return this._load(); },
+
+  isFavorited(addr) { return !!this._load()[addr]; },
+
+  add(listing) {
+    const favs = this._load();
+    const addr = listing.address;
+    if (!addr) return;
+    favs[addr] = {
+      data: Object.assign({}, listing),
+      favorited_at: new Date().toISOString(),
+      last_active_price: listing.list_price,
+      delisted: false,
+      delisted_at: null,
+    };
+    this._save();
+  },
+
+  remove(addr) {
+    const favs = this._load();
+    delete favs[addr];
+    this._save();
+  },
+
+  toggle(listing) {
+    if (this.isFavorited(listing.address)) {
+      this.remove(listing.address);
+      return false;
+    }
+    this.add(listing);
+    return true;
+  },
+
+  syncStatus(activeListings) {
+    const favs = this._load();
+    const activeAddrs = new Set((activeListings || []).map(h => h.address));
+    let changed = false;
+    for (const addr of Object.keys(favs)) {
+      const fav = favs[addr];
+      if (activeAddrs.has(addr)) {
+        // Still active — update snapshot with latest data
+        const current = activeListings.find(h => h.address === addr);
+        if (current) {
+          fav.data = Object.assign({}, current);
+          fav.last_active_price = current.list_price;
+        }
+        if (fav.delisted) { fav.delisted = false; fav.delisted_at = null; changed = true; }
+      } else {
+        // Not in active listings — mark delisted
+        if (!fav.delisted) {
+          fav.delisted = true;
+          fav.delisted_at = new Date().toISOString();
+          changed = true;
+        }
+      }
+    }
+    this._save();
+    return favs;
+  },
+
+  count() { return Object.keys(this._load()).length; },
+};
+
 // --- Touch interaction support ---
 // Toggle tooltips on tap for touch devices (info icons, area score items)
 if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {

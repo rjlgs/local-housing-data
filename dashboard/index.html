@@ -20,6 +20,7 @@
       <button class="tab-btn" data-tab="listings">Listings</button>
       <button class="tab-btn" data-tab="area-compare">Area Compare</button>
       <button class="tab-btn" data-tab="property-explorer">Property Explorer</button>
+      <button class="tab-btn" data-tab="favorites">Favorites <span class="fav-tab-count" id="fav-tab-count"></span></button>
     </nav>
     <button class="btn-reset" id="btn-reset" title="Reset saved preferences">Reset</button>
   </header>
@@ -31,6 +32,7 @@
     <div class="tab-panel" id="panel-listings"></div>
     <div class="tab-panel" id="panel-area-compare"></div>
     <div class="tab-panel" id="panel-property-explorer"></div>
+    <div class="tab-panel" id="panel-favorites"></div>
   </div>
 
   <!-- Component scripts -->
@@ -40,6 +42,7 @@
   <script src="js/listings.js?v=3"></script>
   <script src="js/area-compare.js?v=3"></script>
   <script src="js/property-explorer.js?v=3"></script>
+  <script src="js/favorites.js?v=3"></script>
 
   <script>
     const TABS = {
@@ -47,6 +50,7 @@
       'listings': { component: Listings, panel: 'panel-listings', loaded: false },
       'area-compare': { component: AreaCompare, panel: 'panel-area-compare', loaded: false },
       'property-explorer': { component: PropertyExplorer, panel: 'panel-property-explorer', loaded: false },
+      'favorites': { component: Favorites, panel: 'panel-favorites', loaded: false },
     };
 
     let dashboardData = null;
@@ -76,7 +80,9 @@
     // Reset button
     document.getElementById('btn-reset').addEventListener('click', () => {
       localStorage.removeItem(Prefs._key);
+      localStorage.removeItem(FavoritesStore._storageKey);
       Prefs._cache = null;
+      FavoritesStore._cache = null;
       location.reload();
     });
 
@@ -96,6 +102,14 @@
         const title = metroName + ' Housing Dashboard';
         document.title = title;
         document.getElementById('app-title').textContent = title;
+      }
+
+      // Update favorites tab badge count
+      const favCount = FavoritesStore.count();
+      const favBadge = document.getElementById('fav-tab-count');
+      if (favBadge) {
+        favBadge.textContent = favCount > 0 ? favCount : '';
+        favBadge.style.display = favCount > 0 ? 'inline-flex' : 'none';
       }
 
       // Init saved or default tab

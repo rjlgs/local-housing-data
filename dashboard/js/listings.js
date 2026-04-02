@@ -24,6 +24,7 @@ const Listings = {
   NEW_DAYS: 3,
 
   _headers: [
+    { col: null, label: '\u2606', sortable: false },
     { col: 'first_seen', label: 'Listed' },
     { col: 'address', label: 'Address' },
     { col: 'city', label: 'City' },
@@ -168,6 +169,7 @@ const Listings = {
                 <option value="">All</option>
                 <option value="new">New Only</option>
                 <option value="price-drop">Price Drops</option>
+                <option value="favorited">Favorited</option>
               </select>
             </div>
           </div>
@@ -325,6 +327,7 @@ const Listings = {
     // Listings-specific status filters
     if (f.status === 'new') listings = listings.filter(h => this._isNew(h));
     if (f.status === 'price-drop') listings = listings.filter(h => h.price_change && h.price_change < 0);
+    if (f.status === 'favorited') listings = listings.filter(h => FavoritesStore.isFavorited(h.address));
 
     this._filteredListings = listings;
     this._renderMarkers(listings);
@@ -349,6 +352,7 @@ const Listings = {
       <span>Median $/SqFt: <strong>${Utils.formatCurrency(Utils.median(listings.map(h => h.price_per_sqft).filter(v => v != null)))}</strong></span>
       ${newCount > 0 ? `<span class="badge badge-new">${newCount} new</span>` : ''}
       ${dropCount > 0 ? `<span class="badge badge-drop">${dropCount} price drops</span>` : ''}
+      ${(() => { const fc = listings.filter(h => FavoritesStore.isFavorited(h.address)).length; return fc > 0 ? `<span class="badge badge-fav">${fc} favorited</span>` : ''; })()}
     `;
 
     MapUtils.sortData(listings, this._sort.col, this._sort.asc);
@@ -366,8 +370,10 @@ const Listings = {
         const cls = h.price_change < 0 ? 'delta-down' : 'delta-up';
         priceChangeHtml = `<span class="${cls}">${sign}${Utils.formatCurrency(h.price_change)}</span>`;
       }
+      const isFav = FavoritesStore.isFavorited(h.address);
       return `
         <tr class="clickable-row" data-addr="${(h.address || '').replace(/"/g, '&quot;')}">
+          <td><button class="btn-fav${isFav ? ' active' : ''}" data-fav-addr="${(h.address || '').replace(/"/g, '&quot;')}" title="${isFav ? 'Remove from favorites' : 'Add to favorites'}">${isFav ? '&#9733;' : '&#9734;'}</button></td>
           <td>${Utils.formatDate(h.first_seen)} ${badges.join(' ')}</td>
           <td class="addr-cell"><a href="${h.redfin_url || '#'}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${h.address || '\u2014'}</a></td>
           <td>${h.city || '\u2014'}</td>
@@ -393,6 +399,21 @@ const Listings = {
     MapUtils.bindSortHeaders('#ls-results-table-wrap .sortable', this._sort, ['address', 'first_seen'],
       () => this._renderResults(this._filteredListings));
 
+    // Star (favorite) button handlers
+    document.querySelectorAll('#ls-results-table-wrap .btn-fav').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const addr = btn.dataset.favAddr;
+        const listing = this._allListings.find(h => h.address === addr);
+        if (!listing) return;
+        const nowFav = FavoritesStore.toggle(listing);
+        btn.classList.toggle('active', nowFav);
+        btn.innerHTML = nowFav ? '&#9733;' : '&#9734;';
+        btn.title = nowFav ? 'Remove from favorites' : 'Add to favorites';
+        this._updateFavTabCount();
+      });
+    });
+
     MapUtils.bindTableMarkerHovers({
       rows: '#ls-results-table-wrap .clickable-row', items: listings,
       markersByAddr: this._markersByAddr,
@@ -400,6 +421,15 @@ const Listings = {
       hidePhoto: () => this._hidePhoto(),
       onRowClick: (h) => this._showComps(h),
     });
+  },
+
+  _updateFavTabCount() {
+    const count = FavoritesStore.count();
+    const badge = document.getElementById('fav-tab-count');
+    if (badge) {
+      badge.textContent = count > 0 ? count : '';
+      badge.style.display = count > 0 ? 'inline-flex' : 'none';
+    }
   },
 
   _valueIndicator(listing) {
