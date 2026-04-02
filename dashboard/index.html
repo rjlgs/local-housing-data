@@ -75,6 +75,11 @@
         tab.component.init(document.getElementById(tab.panel), dashboardData);
         tab.loaded = true;
       }
+
+      // Favorites tab always re-renders to pick up changes from other tabs
+      if (tabId === 'favorites' && tab.loaded && dashboardData) {
+        tab.component.init(document.getElementById(tab.panel), dashboardData);
+      }
     }
 
     // Reset button
