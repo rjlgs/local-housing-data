@@ -1166,3 +1166,576 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Camera preview button & tooltip close — hidden on desktop */
+.photo-preview-cell {
+  display: none;
+}
+
+.photo-tooltip-close {
+  display: none;
+}
+
+/* ============================================================
+   MOBILE / RESPONSIVE
+   ============================================================ */
+
+/* --- Tablet (<= 768px) --- */
+@media (max-width: 768px) {
+  /* Header & navigation */
+  .app-header {
+    flex-wrap: wrap;
+    padding: 0.75rem 1rem;
+    gap: 0.5rem;
+  }
+
+  .app-header h1 {
+    font-size: 1rem;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tab-nav {
+    order: 10;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 0 0.5rem;
+    gap: 0;
+  }
+
+  .tab-nav::-webkit-scrollbar { display: none; }
+
+  .tab-btn {
+    padding: 0.6rem 0.75rem;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .tab-content {
+    padding: 1rem;
+  }
+
+  /* Chart grid — lower minimum from 420px */
+  .chart-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+
+  /* Score cards — remove large minimums */
+  .score-row-wrap {
+    flex-direction: column;
+  }
+
+  .score-row-wrap .score-card {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .score-card-map {
+    min-width: 0;
+    width: 100%;
+  }
+
+  /* Score breakdown grid — stack on tablet */
+  .score-item {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+
+  .score-item .score-bar {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .score-item-header {
+    display: none;
+  }
+
+  /* Show metric name + value inline for score items */
+  .score-item > span:first-child {
+    font-weight: 600;
+  }
+
+  /* Score map tooltip — responsive width */
+  .score-map-tooltip {
+    min-width: 0;
+    width: min(420px, 90vw);
+    max-width: 90vw;
+  }
+
+  /* AST rows in score tooltip — responsive */
+  .ast-row {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+
+  .ast-row .score-bar {
+    width: 100%;
+  }
+
+  .ast-hist-vals {
+    display: none;
+  }
+
+  .hist-vals {
+    display: none;
+  }
+
+  /* Area score tooltip — responsive */
+  .area-score-tooltip {
+    width: min(460px, 90vw);
+    left: 0;
+    transform: none;
+  }
+
+  /* Filter bar — wrap and stack */
+  .filter-bar {
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  .filter-cluster {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .filter-group select,
+  .filter-group input:not([type="checkbox"]) {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Override fixed per-control widths */
+  #filter-area,
+  #filter-beds-min, #filter-beds-max,
+  #filter-baths-min, #filter-baths-max,
+  #filter-sqft-min, #filter-sqft-max,
+  #filter-price-min, #filter-price-max,
+  #filter-year-min, #filter-year-max,
+  #filter-hoa, #filter-type { width: 100%; }
+
+  /* Map heights — reduce */
+  .explorer-map {
+    height: 300px;
+  }
+
+  .score-map-container {
+    height: 280px;
+  }
+
+  .zipmap-container {
+    height: 280px;
+  }
+
+  /* Zip map popover — responsive */
+  .zipmap-popover {
+    width: min(480px, 92vw);
+    left: auto;
+    right: 0;
+  }
+
+  /* Data tables — horizontal scroll with smaller font */
+  .data-table {
+    font-size: 0.75rem;
+  }
+
+  .data-table th {
+    padding: 0.4rem 0.5rem;
+  }
+
+  .data-table td {
+    padding: 0.35rem 0.5rem;
+  }
+
+  .addr-cell {
+    max-width: 160px;
+  }
+
+  /* Results summary — wrap */
+  .results-summary {
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    font-size: 0.8125rem;
+  }
+
+  /* Comp modal — full width on tablet */
+  .comp-hover-card {
+    width: min(680px, 95vw);
+    padding: 1rem;
+    max-height: 90vh;
+  }
+
+  .comp-header {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .comp-metrics {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  /* Photo tooltip — responsive */
+  .photo-tooltip {
+    width: min(340px, 85vw);
+  }
+
+  .photo-tooltip-img {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 340/200;
+  }
+
+  /* Multiselect dropdown — responsive */
+  .multiselect {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .multiselect-dropdown {
+    min-width: 0;
+    width: max(260px, 100%);
+    max-width: 90vw;
+  }
+
+  /* Info icon tooltip — responsive position */
+  .info-icon::after {
+    width: min(240px, 70vw);
+    left: auto;
+    right: -10px;
+    transform: none;
+  }
+
+  /* Controls — wrap better */
+  .controls {
+    gap: 0.5rem;
+  }
+
+  .trend-control {
+    margin-left: 0;
+  }
+
+  /* Tab header — wrap */
+  .tab-title-row {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .subtitle-row {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+}
+
+/* --- Mobile (<= 480px) --- */
+@media (max-width: 480px) {
+  body {
+    font-size: 15px;
+  }
+
+  .app-header {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .app-header h1 {
+    font-size: 0.9375rem;
+  }
+
+  .tab-content {
+    padding: 0.75rem;
+  }
+
+  .tab-btn {
+    padding: 0.5rem 0.625rem;
+    font-size: 0.75rem;
+  }
+
+  /* Chart grid — single column */
+  .chart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-card {
+    padding: 0.75rem;
+  }
+
+  /* Score value — slightly smaller */
+  .score-value {
+    font-size: 2rem;
+  }
+
+  /* Filter bar — fully stacked */
+  .filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-cluster {
+    width: 100%;
+  }
+
+  .filter-cluster-row {
+    flex-wrap: wrap;
+  }
+
+  .filter-group {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .filter-actions {
+    flex-direction: row;
+    justify-content: stretch;
+  }
+
+  .filter-actions .btn-primary,
+  .filter-actions .btn-secondary {
+    flex: 1;
+  }
+
+  /* Map height — compact */
+  .explorer-map {
+    height: 250px;
+  }
+
+  .score-map-container {
+    height: 240px;
+  }
+
+  .comp-map {
+    height: 180px;
+  }
+
+  /* Comp modal — nearly full screen */
+  .comp-hover-card {
+    width: 98vw;
+    max-height: 94vh;
+    padding: 0.75rem;
+  }
+
+  .comp-subject {
+    flex-direction: column;
+  }
+
+  .comp-subject-photo,
+  .comp-subject-carousel {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16/9;
+  }
+
+  .comp-subject-carousel .comp-subject-photo {
+    width: 100%;
+    height: 100%;
+  }
+
+  .comp-metrics {
+    gap: 0.5rem;
+  }
+
+  .metric {
+    flex: 1;
+    min-width: 70px;
+  }
+
+  /* Data table — hide less important columns on mobile */
+  .data-table td:nth-child(n+7),
+  .data-table th:nth-child(n+7) {
+    /* Leave visible — user can scroll horizontally */
+  }
+
+  /* Zipmap popover — full width */
+  .zipmap-popover {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-height: 70vh;
+    border-radius: 12px 12px 0 0;
+    z-index: 300;
+  }
+
+  .zipmap-container {
+    height: 50vh;
+  }
+
+  /* Area scores grid — 2 columns on mobile */
+  .area-scores-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+
+  .area-score-tooltip {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: auto;
+    width: 100%;
+    transform: none;
+    border-radius: 12px 12px 0 0;
+    z-index: 100;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+
+  /* Photo tooltip — smaller on mobile */
+  .photo-tooltip {
+    width: min(280px, 80vw);
+  }
+
+  .photo-tooltip-img {
+    height: auto;
+    aspect-ratio: 16/10;
+  }
+
+  /* Modal content — more padding aware */
+  .modal-content {
+    width: 95%;
+    padding: 1.25rem 1rem;
+  }
+
+  /* Freshness badge — allow wrapping */
+  .freshness-badge {
+    font-size: 0.6875rem;
+  }
+}
+
+/* --- Touch device helpers --- */
+@media (hover: none) and (pointer: coarse) {
+  /* Make tap targets at least 44px */
+  .tab-btn {
+    min-height: 44px;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-reset,
+  .btn-learn-more {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .multiselect-trigger {
+    min-height: 44px;
+  }
+
+  .multiselect-option {
+    min-height: 40px;
+    padding: 0.5rem 0.6rem;
+  }
+
+  .filter-group select,
+  .filter-group input:not([type="checkbox"]) {
+    min-height: 44px;
+  }
+
+  .sortable {
+    min-height: 44px;
+  }
+
+  .clickable-row td {
+    padding-top: 0.6rem;
+    padding-bottom: 0.6rem;
+  }
+
+  /* Carousel buttons always visible on touch */
+  .comp-subject-carousel .carousel-btn {
+    opacity: 1;
+  }
+
+  /* Area score tooltip — show on tap instead of hover */
+  .area-score-item .area-score-tooltip {
+    display: none !important;
+  }
+
+  .area-score-item.touch-active .area-score-tooltip {
+    display: flex !important;
+  }
+
+  /* Info icon tooltip — show on tap */
+  .info-icon::after {
+    transition: none;
+  }
+
+  .info-icon.touch-active::after {
+    opacity: 1;
+  }
+
+  /* Zipmap button — bigger tap target */
+  .zipmap-btn {
+    min-height: 44px;
+  }
+
+  .zipmap-close {
+    min-height: 44px;
+    min-width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Photo preview button — visible on touch devices */
+  .photo-preview-cell {
+    display: table-cell;
+    width: 28px;
+    padding: 0 2px !important;
+    vertical-align: middle;
+    text-align: center;
+  }
+
+  .photo-preview-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    min-height: 44px;
+    min-width: 44px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: var(--radius);
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .photo-preview-btn:active,
+  .photo-preview-btn.active {
+    color: var(--primary);
+  }
+
+  /* Photo tooltip on touch: allow taps, show close button */
+  .photo-tooltip {
+    pointer-events: auto;
+  }
+
+  .photo-tooltip-close {
+    display: flex;
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 1;
+    width: 28px;
+    height: 28px;
+    min-height: 44px;
+    min-width: 44px;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    font-size: 1.25rem;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
