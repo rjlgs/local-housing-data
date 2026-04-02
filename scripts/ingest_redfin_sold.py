@@ -177,7 +177,6 @@ def main():
         writer.writeheader()
         writer.writerows(all_rows)
 
-    import json
     meta_path = os.path.join(data_dir, "redfin_sold_meta.json")
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump({"sold_within_days": sold_within_days}, f)
