@@ -355,17 +355,17 @@ const MapUtils = {
       const addr = tr.dataset.addr;
       const item = addr ? items.find(h => h.address === addr) : items[i];
       if (!item) return;
-      tr.addEventListener('mouseenter', (e) => {
-        const m = markersByAddr[item.address];
-        if (m) { m.setRadius(9); m.setStyle({ fillOpacity: 0.95 }); m.bringToFront(); }
-        showPhoto(item, e.clientX, e.clientY);
-      });
-      tr.addEventListener('mouseleave', () => {
-        const m = markersByAddr[item.address];
-        if (m) { m.setRadius(5); m.setStyle({ fillOpacity: restoreOpacity }); }
-        hidePhoto();
-      });
       if (isTouch) {
+        // On touch devices, use the camera button for photo preview
+        // instead of hover (mouseenter/mouseleave interfere with tap)
+        tr.addEventListener('mouseenter', () => {
+          const m = markersByAddr[item.address];
+          if (m) { m.setRadius(9); m.setStyle({ fillOpacity: 0.95 }); m.bringToFront(); }
+        });
+        tr.addEventListener('mouseleave', () => {
+          const m = markersByAddr[item.address];
+          if (m) { m.setRadius(5); m.setStyle({ fillOpacity: restoreOpacity }); }
+        });
         const btn = tr.querySelector('.photo-preview-btn');
         if (btn) {
           btn.addEventListener('click', (e) => {
@@ -377,6 +377,17 @@ const MapUtils = {
             showPhoto(item, rect.left, rect.top);
           });
         }
+      } else {
+        tr.addEventListener('mouseenter', (e) => {
+          const m = markersByAddr[item.address];
+          if (m) { m.setRadius(9); m.setStyle({ fillOpacity: 0.95 }); m.bringToFront(); }
+          showPhoto(item, e.clientX, e.clientY);
+        });
+        tr.addEventListener('mouseleave', () => {
+          const m = markersByAddr[item.address];
+          if (m) { m.setRadius(5); m.setStyle({ fillOpacity: restoreOpacity }); }
+          hidePhoto();
+        });
       }
       if (onRowClick) {
         tr.addEventListener('click', () => onRowClick(item));
