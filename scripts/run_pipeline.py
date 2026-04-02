@@ -1,0 +1,225 @@
+#!/usr/bin/env python3
+"""
+Single entry point for the housing data pipeline.
+
+Supports tiered updates so different data sources can refresh independently:
+  - county_parcels:   County ArcGIS (~10 min, every ~2 weeks)
+  - market_trends:    Redfin S3 bulk data (~3 min, every ~2 weeks)
+  - sold_homes:       Redfin sold CSV (~1 min, daily)
+  - active_listings:  Redfin active CSV (~1 min, twice daily)
+
+Usage:
+    python3 scripts/run_pipeline.py                # run all tiers
+    python3 scripts/run_pipeline.py --tier active   # just active listings
+    python3 scripts/run_pipeline.py --tier sold     # just sold homes
+    python3 scripts/run_pipeline.py --tier trends   # just market trends
+    python3 scripts/run_pipeline.py --tier county   # just county parcels
+    python3 scripts/run_pipeline.py --if-stale      # only run tiers that are due
+    python3 scripts/run_pipeline.py --skip-county   # all except county (legacy)
+    python3 scripts/run_pipeline.py --sold-days 30  # override sold-homes window
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import time
+
+import pipeline_state
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Tier name -> pipeline steps (in order)
+TIER_STEPS = {
+    "county_parcels": [
+        {
+            "name": "County Parcels",
+            "script": "ingest_county_parcels.py",
+            "description": "County property characteristics via ArcGIS",
+        },
+    ],
+    "market_trends": [
+        {
+            "name": "Redfin Market Data",
+            "script": "ingest_redfin_market.py",
+            "description": "City + zip-level market trends (Redfin S3)",
+        },
+    ],
+    "sold_homes": [
+        {
+            "name": "Redfin Sold Homes",
+            "script": "ingest_redfin_sold.py",
+            "description": "Individual sold-home transactions across metro cities (Redfin CSV)",
+            "extra_args_key": "sold_days",
+        },
+    ],
+    "active_listings": [
+        {
+            "name": "Redfin Active Listings",
+            "script": "ingest_redfin_active.py",
+            "description": "Currently active for-sale listings across metro cities (Redfin CSV)",
+        },
+    ],
+}
+
+# Post-ingest steps that always run after any tier updates
+POST_STEPS = [
+    {
+        "name": "Combine Data",
+        "script": "combine_data.py",
+        "description": "Join county parcels with Redfin data on address",
+    },
+    {
+        "name": "Build Dashboard Data",
+        "script": "build_dashboard_data.py",
+        "description": "Assemble dashboard_data.json from all data sources",
+    },
+]
+
+# Shorthand aliases for --tier
+TIER_ALIASES = {
+    "active": "active_listings",
+    "sold": "sold_homes",
+    "trends": "market_trends",
+    "county": "county_parcels",
+}
+
+
+def run_step(step, args):
+    """Run a single pipeline step. Returns True on success."""
+    script = os.path.join(SCRIPT_DIR, step["script"])
+
+    if not os.path.exists(script):
+        print(f"  WARNING: {step['script']} not found, skipping")
+        return True
+
+    cmd = [sys.executable, script]
+
+    extra_key = step.get("extra_args_key")
+    if extra_key:
+        val = getattr(args, extra_key, None)
+        if val is not None:
+            cmd.append(str(val))
+
+    start = time.time()
+    result = subprocess.run(cmd, cwd=os.path.dirname(SCRIPT_DIR))
+    elapsed = time.time() - start
+
+    if result.returncode != 0:
+        print(f"  FAILED (exit code {result.returncode}, {elapsed:.0f}s)\n")
+        return False
+
+    print(f"  Completed in {elapsed:.0f}s\n")
+    return True
+
+
+def resolve_tiers(args):
+    """Determine which tiers to run based on arguments."""
+    if args.if_stale:
+        stale = pipeline_state.get_stale_tiers()
+        if not stale:
+            print("All tiers are fresh. Nothing to do.\n")
+            return []
+        print(f"Stale tiers: {', '.join(stale)}\n")
+        return stale
+
+    if args.tier:
+        tier = TIER_ALIASES.get(args.tier, args.tier)
+        if tier not in TIER_STEPS:
+            print(f"Unknown tier: {args.tier}")
+            print(f"Available: {', '.join(list(TIER_ALIASES.keys()) + list(TIER_STEPS.keys()))}")
+            sys.exit(1)
+        return [tier]
+
+    # Default: all tiers (respecting --skip-county)
+    tiers = list(TIER_STEPS.keys())
+    if args.skip_county:
+        tiers = [t for t in tiers if t != "county_parcels"]
+    return tiers
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Run the housing data pipeline."
+    )
+    parser.add_argument(
+        "--tier", type=str, default=None,
+        help="Run only a specific tier: active, sold, trends, county"
+    )
+    parser.add_argument(
+        "--if-stale", action="store_true",
+        help="Only run tiers whose data is older than their cadence"
+    )
+    parser.add_argument(
+        "--skip-county", action="store_true",
+        help="Skip the county parcels pull (legacy flag)"
+    )
+    parser.add_argument(
+        "--sold-days", type=int, default=None,
+        help="Override sold-within-days for Redfin sold homes (default: 90)"
+    )
+    args = parser.parse_args()
+
+    # Load config for metro name in banner
+    config_path = os.path.join(os.path.dirname(SCRIPT_DIR), "config.json")
+    with open(config_path) as f:
+        config = json.load(f)
+    metro_name = config.get("metro", {}).get("name", "Housing Data")
+
+    print("=" * 60)
+    print(f"  {metro_name} Housing Data Pipeline")
+    print("=" * 60)
+    print()
+
+    tiers_to_run = resolve_tiers(args)
+    if not tiers_to_run:
+        sys.exit(0)
+
+    total_start = time.time()
+    failures = []
+    step_num = 0
+
+    # Collect all ingest steps for selected tiers
+    ingest_steps = []
+    for tier in tiers_to_run:
+        ingest_steps.extend([(tier, s) for s in TIER_STEPS[tier]])
+
+    total_steps = len(ingest_steps) + len(POST_STEPS)
+
+    # Run ingest steps
+    for tier, step in ingest_steps:
+        step_num += 1
+        print(f"[{step_num}/{total_steps}] {step['name']}")
+        print(f"     {step['description']}")
+        if run_step(step, args):
+            pipeline_state.record_update(tier)
+        else:
+            failures.append(step["name"])
+
+    # Always run post-ingest steps (combine + build) if any ingest succeeded
+    if len(failures) < len(ingest_steps):
+        for step in POST_STEPS:
+            step_num += 1
+            print(f"[{step_num}/{total_steps}] {step['name']}")
+            print(f"     {step['description']}")
+            if not run_step(step, args):
+                failures.append(step["name"])
+    else:
+        print("All ingest steps failed. Skipping combine and build.\n")
+
+    total_elapsed = time.time() - total_start
+    print("=" * 60)
+
+    if failures:
+        print(f"  Pipeline finished with errors ({total_elapsed:.0f}s)")
+        print(f"  Failed steps: {', '.join(failures)}")
+        sys.exit(1)
+    else:
+        print(f"  Pipeline complete ({total_elapsed:.0f}s)")
+        print(f"  Tiers updated: {', '.join(tiers_to_run)}")
+        sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

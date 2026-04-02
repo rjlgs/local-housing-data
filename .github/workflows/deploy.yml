@@ -1,0 +1,85 @@
+name: Deploy Dashboard
+
+on:
+  schedule:
+    - cron: '0 8 * * *' # Daily at 8am UTC
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: 'Pipeline tier (empty = --if-stale)'
+        required: false
+        default: ''
+        type: choice
+        options: ['', active, sold, trends, county, all]
+  push:
+    branches: [main]
+    paths: ['dashboard/**', 'scripts/**', 'config.json']
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Restore cached data/ (pipeline state, intermediate CSVs, photo cache)
+      - uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: pipeline-data-${{ github.run_id }}
+          restore-keys: pipeline-data-
+
+      # Run the data pipeline
+      - name: Run pipeline
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tier }}" ]; then
+            if [ "${{ inputs.tier }}" = "all" ]; then
+              python3 scripts/run_pipeline.py
+            else
+              python3 scripts/run_pipeline.py --tier "${{ inputs.tier }}"
+            fi
+          else
+            python3 scripts/run_pipeline.py --if-stale
+          fi
+
+      # Save cache (always, so partial data persists across runs)
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data
+          key: pipeline-data-${{ github.run_id }}
+
+      # Assemble site for GitHub Pages
+      - name: Assemble site
+        run: |
+          mkdir -p _site/dashboard _site/data
+          cp index.html _site/
+          cp -r dashboard/* _site/dashboard/
+          cp data/dashboard_data.json _site/data/
+          [ -f data/zcta_boundaries.geojson ] && cp data/zcta_boundaries.geojson _site/data/ || true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build-and-deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
