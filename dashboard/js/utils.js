@@ -191,7 +191,16 @@ const Utils = {
   },
 
   get plotlyDefaults() {
-    return JSON.parse(JSON.stringify(this._plotlyDefaults));
+    const d = JSON.parse(JSON.stringify(this._plotlyDefaults));
+    if (window.innerWidth <= 480) {
+      d.margin = { t: 8, r: 10, b: 45, l: 40 };
+      d.font.size = 10;
+      d.legend.font = { size: 9 };
+    } else if (window.innerWidth <= 768) {
+      d.margin = { t: 8, r: 15, b: 50, l: 50 };
+      d.font.size = 11;
+    }
+    return d;
   },
 };
 
@@ -535,9 +544,10 @@ const MapUtils = {
       tooltip.querySelector('.photo-tooltip-specs').textContent = specs;
       tooltip.querySelector('.photo-tooltip-location').textContent =
         [home.neighborhood, home.city, home.zip_code].filter(Boolean).join(' ');
-      const tw = 340, th = 300;
+      const tw = Math.min(340, window.innerWidth * 0.85), th = 300;
       let left = x + 16, top = y - th / 2;
       if (left + tw > window.innerWidth - 10) left = x - tw - 16;
+      if (left < 5) left = 5;
       if (top < 10) top = 10;
       if (top + th > window.innerHeight - 10) top = window.innerHeight - th - 10;
       tooltip.style.left = left + 'px';
@@ -779,3 +789,35 @@ const Prefs = {
     try { localStorage.setItem(this._key, JSON.stringify(data)); } catch {}
   },
 };
+
+// --- Touch interaction support ---
+// Toggle tooltips on tap for touch devices (info icons, area score items)
+if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+  document.addEventListener('click', (e) => {
+    // Info icon tap-to-show
+    const icon = e.target.closest('.info-icon');
+    if (icon) {
+      e.preventDefault();
+      e.stopPropagation();
+      document.querySelectorAll('.info-icon.touch-active').forEach(el => {
+        if (el !== icon) el.classList.remove('touch-active');
+      });
+      icon.classList.toggle('touch-active');
+      return;
+    }
+
+    // Area score item tap-to-show
+    const scoreItem = e.target.closest('.area-score-item');
+    if (scoreItem) {
+      e.preventDefault();
+      document.querySelectorAll('.area-score-item.touch-active').forEach(el => {
+        if (el !== scoreItem) el.classList.remove('touch-active');
+      });
+      scoreItem.classList.toggle('touch-active');
+      return;
+    }
+
+    // Dismiss all touch tooltips when tapping elsewhere
+    document.querySelectorAll('.touch-active').forEach(el => el.classList.remove('touch-active'));
+  });
+}
