@@ -170,6 +170,8 @@ const Listings = {
                 <option value="new">New Only</option>
                 <option value="price-drop">Price Drops</option>
                 <option value="favorited">Favorited</option>
+                <option value="hide-downvoted">Hide Ruled Out</option>
+                <option value="downvoted">Ruled Out Only</option>
               </select>
             </div>
           </div>
@@ -328,6 +330,8 @@ const Listings = {
     if (f.status === 'new') listings = listings.filter(h => this._isNew(h));
     if (f.status === 'price-drop') listings = listings.filter(h => h.price_change && h.price_change < 0);
     if (f.status === 'favorited') listings = listings.filter(h => FavoritesStore.isFavorited(h.address));
+    if (f.status === 'hide-downvoted') listings = listings.filter(h => !DownvoteStore.isDownvoted(h.address));
+    if (f.status === 'downvoted') listings = listings.filter(h => DownvoteStore.isDownvoted(h.address));
 
     this._filteredListings = listings;
     this._renderMarkers(listings);
@@ -353,6 +357,7 @@ const Listings = {
       ${newCount > 0 ? `<span class="badge badge-new">${newCount} new</span>` : ''}
       ${dropCount > 0 ? `<span class="badge badge-drop">${dropCount} price drops</span>` : ''}
       ${(() => { const fc = listings.filter(h => FavoritesStore.isFavorited(h.address)).length; return fc > 0 ? `<span class="badge badge-fav">${fc} favorited</span>` : ''; })()}
+      ${(() => { const dc = listings.filter(h => DownvoteStore.isDownvoted(h.address)).length; return dc > 0 ? `<span class="badge badge-downvote">${dc} ruled out</span>` : ''; })()}
     `;
 
     MapUtils.sortData(listings, this._sort.col, this._sort.asc);
@@ -371,9 +376,10 @@ const Listings = {
         priceChangeHtml = `<span class="${cls}">${sign}${Utils.formatCurrency(h.price_change)}</span>`;
       }
       const isFav = FavoritesStore.isFavorited(h.address);
+      const isDown = DownvoteStore.isDownvoted(h.address);
       return `
-        <tr class="clickable-row" data-addr="${(h.address || '').replace(/"/g, '&quot;')}">
-          <td><button class="btn-fav${isFav ? ' active' : ''}" data-fav-addr="${(h.address || '').replace(/"/g, '&quot;')}" title="${isFav ? 'Remove from favorites' : 'Add to favorites'}">${isFav ? '&#9733;' : '&#9734;'}</button></td>
+        <tr class="clickable-row${isDown ? ' downvoted-row' : ''}" data-addr="${(h.address || '').replace(/"/g, '&quot;')}">
+          <td><button class="btn-fav${isFav ? ' active' : ''}" data-fav-addr="${(h.address || '').replace(/"/g, '&quot;')}" title="${isFav ? 'Remove from favorites' : 'Add to favorites'}">${isFav ? '&#9733;' : '&#9734;'}</button><button class="btn-downvote${isDown ? ' active' : ''}" data-down-addr="${(h.address || '').replace(/"/g, '&quot;')}" title="${isDown ? 'Remove rule-out' : 'Rule out this listing'}">&#10005;</button></td>
           ${MapUtils.PHOTO_BTN_HTML}
           <td>${Utils.formatDate(h.first_seen)} ${badges.join(' ')}</td>
           <td class="addr-cell"><a href="${h.redfin_url || '#'}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${h.address || '\u2014'}</a></td>
@@ -411,7 +417,38 @@ const Listings = {
         btn.classList.toggle('active', nowFav);
         btn.innerHTML = nowFav ? '&#9733;' : '&#9734;';
         btn.title = nowFav ? 'Remove from favorites' : 'Add to favorites';
+        // Mutual exclusion: favoriting removes downvote
+        if (nowFav && DownvoteStore.isDownvoted(addr)) {
+          DownvoteStore.remove(addr);
+          const downBtn = btn.parentElement.querySelector('.btn-downvote');
+          if (downBtn) downBtn.classList.remove('active');
+          btn.closest('tr').classList.remove('downvoted-row');
+        }
         this._updateFavTabCount();
+      });
+    });
+
+    // Downvote (rule-out) button handlers
+    document.querySelectorAll('#ls-results-table-wrap .btn-downvote').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const addr = btn.dataset.downAddr;
+        const nowDown = DownvoteStore.toggle(addr);
+        btn.classList.toggle('active', nowDown);
+        btn.title = nowDown ? 'Remove rule-out' : 'Rule out this listing';
+        const row = btn.closest('tr');
+        row.classList.toggle('downvoted-row', nowDown);
+        // Mutual exclusion: downvoting removes favorite
+        if (nowDown && FavoritesStore.isFavorited(addr)) {
+          FavoritesStore.remove(addr);
+          const favBtn = row.querySelector('.btn-fav');
+          if (favBtn) {
+            favBtn.classList.remove('active');
+            favBtn.innerHTML = '&#9734;';
+            favBtn.title = 'Add to favorites';
+          }
+          this._updateFavTabCount();
+        }
       });
     });
 
