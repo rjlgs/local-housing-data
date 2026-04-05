@@ -916,6 +916,54 @@ const FavoritesStore = {
   count() { return Object.keys(this._load()).length; },
 };
 
+const DownvoteStore = {
+  _storageKey: 'housing-downvotes',
+  _cache: null,
+
+  _load() {
+    if (this._cache) return this._cache;
+    try {
+      const raw = localStorage.getItem(this._storageKey);
+      this._cache = raw ? JSON.parse(raw) : {};
+    } catch {
+      this._cache = {};
+    }
+    return this._cache;
+  },
+
+  _save() {
+    try { localStorage.setItem(this._storageKey, JSON.stringify(this._load())); } catch {}
+  },
+
+  getAll() { return this._load(); },
+
+  isDownvoted(addr) { return !!this._load()[addr]; },
+
+  add(addr) {
+    const store = this._load();
+    if (!addr) return;
+    store[addr] = { downvoted_at: new Date().toISOString() };
+    this._save();
+  },
+
+  remove(addr) {
+    const store = this._load();
+    delete store[addr];
+    this._save();
+  },
+
+  toggle(addr) {
+    if (this.isDownvoted(addr)) {
+      this.remove(addr);
+      return false;
+    }
+    this.add(addr);
+    return true;
+  },
+
+  count() { return Object.keys(this._load()).length; },
+};
+
 // --- Touch interaction support ---
 // Toggle tooltips on tap for touch devices (info icons, area score items)
 if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
