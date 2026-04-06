@@ -535,11 +535,12 @@ const Listings = {
       <div id="ls-comp-map" class="comp-map"></div>
       ${comps.length > 0 ? `
         <table class="data-table comp-table"><thead><tr>
-          <th class="photo-preview-cell"></th><th>Match</th><th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
+          <th class="photo-preview-cell"></th><th>Match</th><th>VQ</th><th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
         </tr></thead><tbody>
           ${comps.slice(0, 15).map(c => { const sc = scoreMap.get(c.address) || 0; return `<tr>
             ${MapUtils.PHOTO_BTN_HTML}
             <td><span class="match-badge ${Utils.similarityBadgeClass(sc)}">${sc}%</span></td>
+            <td>${Utils.visualQualityBadge(c)}</td>
             <td>${Utils.formatDate(c.sold_date)}</td>
             <td class="addr-cell"><a href="${c.redfin_url || '#'}" target="_blank" rel="noopener">${c.address}</a></td>
             <td>${Utils.formatCurrency(c.sale_price)}</td>
