@@ -36,7 +36,6 @@
       <span id="user-email-text"></span>
       <a href="#" id="btn-signout" class="btn-signout">Sign out</a>
     </span>
-    <button class="btn-reset" id="btn-reset" title="Reset saved preferences">Reset</button>
   </header>
 
   <div class="tab-content" id="app">
@@ -95,13 +94,6 @@
         tab.component.init(document.getElementById(tab.panel), dashboardData);
       }
     }
-
-    // Reset button — clears preferences only (not email/sign-in)
-    document.getElementById('btn-reset').addEventListener('click', () => {
-      localStorage.removeItem(Prefs._key);
-      Prefs._cache = null;
-      location.reload();
-    });
 
     // Sign-out button
     document.getElementById('btn-signout').addEventListener('click', (e) => {
@@ -175,6 +167,15 @@
           // keep localStorage as-is
         } else {
           DownvoteStore.loadFromServer(serverDowns);
+        }
+
+        // Merge prefs (excluding activeTab which stays local)
+        const localPrefs = Prefs.getSyncable();
+        const serverPrefs = serverData.prefs || {};
+        if (!Object.keys(serverPrefs).length && Object.keys(localPrefs).length) {
+          // keep local prefs (migration)
+        } else {
+          Prefs.loadFromServer(serverPrefs);
         }
 
         // Push current state to server (handles migration case)

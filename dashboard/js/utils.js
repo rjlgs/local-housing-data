@@ -855,7 +855,7 @@ const SyncClient = {
     }
 
     // Create new bin for this user
-    const newBinId = await this._createBin({ favorites: {}, downvotes: {}, _created: new Date().toISOString() }, `user-${email}`);
+    const newBinId = await this._createBin({ favorites: {}, downvotes: {}, prefs: {}, _created: new Date().toISOString() }, `user-${email}`);
     // Register in master index
     master[email] = newBinId;
     await this._updateBin(this._masterBinId, master);
@@ -890,6 +890,7 @@ const SyncClient = {
         await this._updateBin(binId, {
           favorites: favorites || FavoritesStore.getAll(),
           downvotes: downvotes || DownvoteStore.getAll(),
+          prefs: Prefs.getSyncable(),
         });
       } catch (err) {
         console.error('SyncClient.saveUserData failed:', err);
@@ -962,6 +963,22 @@ const Prefs = {
     }
     obj[parts[parts.length - 1]] = value;
     try { localStorage.setItem(this._key, JSON.stringify(data)); } catch {}
+    if (path !== 'activeTab') SyncClient.saveUserData();
+  },
+
+  getAll() { return this._load(); },
+
+  getSyncable() {
+    const data = { ...this._load() };
+    delete data.activeTab;
+    return data;
+  },
+
+  loadFromServer(data) {
+    const currentTab = this._load().activeTab;
+    this._cache = data || {};
+    if (currentTab) this._cache.activeTab = currentTab;
+    try { localStorage.setItem(this._key, JSON.stringify(this._cache)); } catch {}
   },
 };
 
