@@ -768,6 +768,138 @@ const MapUtils = {
 
 };
 
+// --- User session (email-based identity) ---
+
+const UserSession = {
+  _emailKey: 'housing-user-email',
+  _binIdKey: 'housing-user-bin-id',
+
+  getEmail() { return localStorage.getItem(this._emailKey); },
+  setEmail(email) { localStorage.setItem(this._emailKey, email.trim().toLowerCase()); },
+  clearEmail() { localStorage.removeItem(this._emailKey); },
+  isSignedIn() { return !!this.getEmail(); },
+
+  getBinId() { return localStorage.getItem(this._binIdKey); },
+  setBinId(id) { localStorage.setItem(this._binIdKey, id); },
+  clearBinId() { localStorage.removeItem(this._binIdKey); },
+};
+
+// --- JSONBin.io sync client ---
+
+const SyncClient = {
+  _apiKey: null,
+  _masterBinId: null,
+  _debounceTimer: null,
+  _saving: false,
+
+  init(config) {
+    if (!config) return;
+    this._apiKey = config.api_key || null;
+    this._masterBinId = config.master_bin_id || null;
+  },
+
+  isConfigured() {
+    return !!(this._apiKey && this._masterBinId);
+  },
+
+  _headers() {
+    return {
+      'Content-Type': 'application/json',
+      'X-Master-Key': this._apiKey,
+    };
+  },
+
+  async _fetchBin(binId) {
+    const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
+      headers: this._headers(),
+    });
+    if (!resp.ok) throw new Error(`JSONBin GET ${resp.status}`);
+    const json = await resp.json();
+    return json.record;
+  },
+
+  async _updateBin(binId, data) {
+    const resp = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
+      method: 'PUT',
+      headers: this._headers(),
+      body: JSON.stringify(data),
+    });
+    if (!resp.ok) throw new Error(`JSONBin PUT ${resp.status}`);
+    return resp.json();
+  },
+
+  async _createBin(data, name) {
+    const headers = this._headers();
+    if (name) headers['X-Bin-Name'] = name;
+    const resp = await fetch('https://api.jsonbin.io/v3/b', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data),
+    });
+    if (!resp.ok) throw new Error(`JSONBin POST ${resp.status}`);
+    const json = await resp.json();
+    return json.metadata.id;
+  },
+
+  // Resolve email → bin ID, creating a new bin if needed
+  async _getOrCreateBin(email) {
+    // Check localStorage cache first
+    const cached = UserSession.getBinId();
+    if (cached) return cached;
+
+    // Fetch master index
+    const master = await this._fetchBin(this._masterBinId);
+    if (master[email]) {
+      UserSession.setBinId(master[email]);
+      return master[email];
+    }
+
+    // Create new bin for this user
+    const newBinId = await this._createBin({ favorites: {}, downvotes: {} }, `user-${email}`);
+    // Register in master index
+    master[email] = newBinId;
+    await this._updateBin(this._masterBinId, master);
+    UserSession.setBinId(newBinId);
+    return newBinId;
+  },
+
+  // Fetch user data from JSONBin. Returns { favorites, downvotes } or null on error.
+  async fetchUserData(email) {
+    if (!this.isConfigured() || !email) return null;
+    try {
+      const binId = await this._getOrCreateBin(email);
+      const record = await this._fetchBin(binId);
+      return record;
+    } catch (err) {
+      console.error('SyncClient.fetchUserData failed:', err);
+      return null;
+    }
+  },
+
+  // Save full state to JSONBin (debounced 2s). Fire-and-forget.
+  saveUserData(favorites, downvotes) {
+    if (!this.isConfigured()) return;
+    const binId = UserSession.getBinId();
+    if (!binId) return;
+
+    clearTimeout(this._debounceTimer);
+    this._debounceTimer = setTimeout(async () => {
+      if (this._saving) return;
+      this._saving = true;
+      try {
+        await this._updateBin(binId, {
+          favorites: favorites || FavoritesStore.getAll(),
+          downvotes: downvotes || DownvoteStore.getAll(),
+        });
+      } catch (err) {
+        console.error('SyncClient.saveUserData failed:', err);
+      } finally {
+        this._saving = false;
+      }
+    }, 2000);
+  },
+};
+
 // --- Preferences persistence via localStorage ---
 
 const Prefs = {
@@ -833,7 +965,7 @@ const Prefs = {
   },
 };
 
-// --- Favorites (localStorage persistence) ---
+// --- Favorites (localStorage + JSONBin persistence) ---
 const FavoritesStore = {
   _storageKey: 'housing-favorites',
   _cache: null,
@@ -851,6 +983,12 @@ const FavoritesStore = {
 
   _save() {
     try { localStorage.setItem(this._storageKey, JSON.stringify(this._load())); } catch {}
+    SyncClient.saveUserData();
+  },
+
+  loadFromServer(data) {
+    this._cache = data || {};
+    try { localStorage.setItem(this._storageKey, JSON.stringify(this._cache)); } catch {}
   },
 
   getAll() { return this._load(); },
@@ -933,6 +1071,12 @@ const DownvoteStore = {
 
   _save() {
     try { localStorage.setItem(this._storageKey, JSON.stringify(this._load())); } catch {}
+    SyncClient.saveUserData();
+  },
+
+  loadFromServer(data) {
+    this._cache = data || {};
+    try { localStorage.setItem(this._storageKey, JSON.stringify(this._cache)); } catch {}
   },
 
   getAll() { return this._load(); },
