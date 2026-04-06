@@ -554,6 +554,26 @@ def main():
     else:
         sold_window_days = None
 
+    # Attach visual quality scores from cache
+    vq_cache_path = DATA_DIR / "visual_quality_cache.json"
+    if vq_cache_path.exists():
+        print("\nAttaching visual quality scores...")
+        with open(vq_cache_path) as f:
+            vq_cache = json.load(f)
+        vq_assigned = 0
+        for home_list in [homes, active_listings or []]:
+            for home in home_list:
+                vq = vq_cache.get(home.get("address"))
+                if vq:
+                    home["visual_quality"] = vq.get("score")
+                    home["vq_condition"] = vq.get("condition")
+                    home["vq_finish"] = vq.get("finish")
+                    home["vq_aesthetic"] = vq.get("aesthetic")
+                    vq_assigned += 1
+        print(f"  Assigned visual quality scores to {vq_assigned} homes")
+    else:
+        print("\nNo visual quality cache found (run assess_visual_quality.py to generate)")
+
     # Compute area summaries
     print("\nComputing area summaries...")
     area_summary = compute_area_summary(config, homes)

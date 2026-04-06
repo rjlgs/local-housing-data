@@ -170,6 +170,139 @@ const Utils = {
     }];
   },
 
+  // --- Property Similarity Scoring ---
+
+  /**
+   * Haversine distance in miles between two lat/lng points.
+   */
+  haversineDistance(lat1, lng1, lat2, lng2) {
+    const R = 3958.8; // Earth radius in miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  },
+
+  /**
+   * Weighted multi-attribute similarity score (0–100).
+   * Higher = more similar.
+   */
+  SIMILARITY_WEIGHTS: {
+    sqft:           0.20,
+    beds:           0.15,
+    baths:          0.10,
+    year_built:     0.12,
+    lot_size_sqft:  0.08,
+    price_per_sqft: 0.10,
+    property_type:  0.10,
+    location:       0.10,
+    visual_quality: 0.05,
+  },
+
+  computeSimilarity(subject, candidate) {
+    const W = this.SIMILARITY_WEIGHTS;
+    let totalWeight = 0;
+    let weightedDist = 0;
+
+    const addDim = (key, dist) => {
+      totalWeight += W[key];
+      weightedDist += W[key] * Math.min(dist, 1);
+    };
+
+    // Numeric ratio distance: abs(a-b) / max(a,b)
+    const ratioDist = (a, b, floor) => {
+      if (a == null || b == null) return null;
+      const denom = Math.max(a, b, floor || 1);
+      return Math.abs(a - b) / denom;
+    };
+
+    const sqftD = ratioDist(subject.sqft, candidate.sqft);
+    if (sqftD != null) addDim('sqft', sqftD);
+
+    const bedsD = ratioDist(subject.beds, candidate.beds, 1);
+    if (bedsD != null) addDim('beds', bedsD);
+
+    const bathsD = ratioDist(subject.baths, candidate.baths, 1);
+    if (bathsD != null) addDim('baths', bathsD);
+
+    if (subject.year_built && candidate.year_built) {
+      addDim('year_built', Math.min(Math.abs(subject.year_built - candidate.year_built) / 100, 1));
+    }
+
+    const lotD = ratioDist(subject.lot_size_sqft, candidate.lot_size_sqft, 1);
+    if (lotD != null) addDim('lot_size_sqft', lotD);
+
+    const ppsfD = ratioDist(subject.price_per_sqft, candidate.price_per_sqft, 1);
+    if (ppsfD != null) addDim('price_per_sqft', ppsfD);
+
+    if (subject.property_type && candidate.property_type) {
+      addDim('property_type', subject.property_type === candidate.property_type ? 0 : 1);
+    }
+
+    if (subject.latitude != null && subject.longitude != null &&
+        candidate.latitude != null && candidate.longitude != null) {
+      const miles = this.haversineDistance(
+        subject.latitude, subject.longitude,
+        candidate.latitude, candidate.longitude
+      );
+      addDim('location', Math.min(miles / 10, 1)); // 0 at same spot, 1 at ≥10 mi
+    }
+
+    if (subject.visual_quality != null && candidate.visual_quality != null) {
+      addDim('visual_quality', Math.abs(subject.visual_quality - candidate.visual_quality) / 10);
+    }
+
+    if (totalWeight === 0) return 0;
+    // Normalize so missing attributes don't deflate the score
+    const normalizedDist = weightedDist / totalWeight;
+    return Math.round(Math.max(0, Math.min(100, (1 - normalizedDist) * 100)));
+  },
+
+  /**
+   * Find and rank comparable properties by similarity score.
+   * Pre-filters to reasonable candidates, then scores and sorts.
+   * Returns array of { home, score } objects.
+   */
+  findComps(subject, allHomes, { maxResults = 15, minScore = 0 } = {}) {
+    const sqft = subject.sqft || 0;
+    const price = subject.sale_price || subject.list_price || 0;
+
+    // Loose pre-filter to avoid scoring every property
+    const candidates = allHomes.filter(h =>
+      h.address !== subject.address &&
+      h.sqft != null && (sqft === 0 || (h.sqft >= sqft * 0.5 && h.sqft <= sqft * 2.0)) &&
+      (h.sale_price != null || h.list_price != null)
+    );
+
+    const scored = candidates.map(h => ({
+      home: h,
+      score: this.computeSimilarity(subject, h),
+    }));
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.filter(s => s.score >= minScore).slice(0, maxResults);
+  },
+
+  similarityBadgeClass(score) {
+    if (score >= 80) return 'match-high';
+    if (score >= 60) return 'match-mid';
+    return 'match-low';
+  },
+
+  visualQualityBadge(home) {
+    const vq = home.visual_quality;
+    if (vq == null) return '';
+    const cls = vq >= 7 ? 'vq-high' : vq >= 5 ? 'vq-mid' : 'vq-low';
+    const title = [
+      home.vq_condition != null ? `Condition: ${home.vq_condition}` : '',
+      home.vq_finish != null ? `Finish: ${home.vq_finish}` : '',
+      home.vq_aesthetic != null ? `Aesthetic: ${home.vq_aesthetic}` : '',
+    ].filter(Boolean).join(', ');
+    return `<span class="vq-badge ${cls}" title="${title}">${vq.toFixed(1)}</span>`;
+  },
+
   /**
    * Resolve the effective trend type for a chart.
    * chartOverride: per-chart setting ('global' means use globalType).
