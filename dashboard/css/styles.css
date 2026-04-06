@@ -58,6 +58,93 @@ body {
 
 .btn-reset:hover { color: var(--red); border-color: var(--red); }
 
+/* === Email sign-in modal === */
+.email-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.email-modal-content {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 2rem 2.5rem;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+  text-align: center;
+}
+
+.email-modal-content h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.email-modal-content p {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin-bottom: 1.25rem;
+}
+
+.email-modal-content input[type="email"] {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.15s;
+  margin-bottom: 1rem;
+}
+
+.email-modal-content input[type="email"]:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.email-submit-btn {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.email-submit-btn:hover { background: var(--primary-hover); }
+
+/* === User email display + sign-out === */
+.user-email-display {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.btn-signout {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.btn-signout:hover { color: var(--red); border-color: var(--red); }
+
 /* === Tabs === */
 .tab-nav {
   display: flex;
