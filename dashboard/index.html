@@ -122,7 +122,7 @@
 
     // Session init: prompt for email if needed, sync with JSONBin
     async function initSession() {
-      // Load jsonbin config
+      // Load jsonbin config from main config
       try {
         const cfgResp = await fetch('../config.json');
         const cfg = await cfgResp.json();
