@@ -472,14 +472,8 @@ const Listings = {
 
   _valueIndicator(listing) {
     if (!listing.list_price || !listing.zip_code) return '\u2014';
-    const sqft = listing.sqft || 0;
-    const beds = listing.beds || 0;
-    const comps = this._allSold.filter(h =>
-      h.zip_code === listing.zip_code &&
-      h.beds != null && Math.abs(h.beds - beds) <= 1 &&
-      h.sqft != null && sqft > 0 && h.sqft >= sqft * 0.75 && h.sqft <= sqft * 1.25 &&
-      h.sale_price != null
-    );
+    const scoredComps = Utils.findComps(listing, this._allSold);
+    const comps = scoredComps.map(s => s.home);
     if (comps.length < 2) return '\u2014';
     const medianSold = Utils.median(comps.map(h => h.sale_price));
     if (!medianSold) return '\u2014';
@@ -490,14 +484,9 @@ const Listings = {
   },
 
   _showComps(listing) {
-    const sqft = listing.sqft || 0;
-    const beds = listing.beds || 0;
-    const comps = this._allSold.filter(h =>
-      h.zip_code === listing.zip_code &&
-      h.beds != null && Math.abs(h.beds - beds) <= 1 &&
-      h.sqft != null && sqft > 0 && h.sqft >= sqft * 0.75 && h.sqft <= sqft * 1.25 &&
-      h.sale_price != null
-    );
+    const scoredComps = Utils.findComps(listing, this._allSold);
+    const comps = scoredComps.map(s => s.home);
+    const scoreMap = new Map(scoredComps.map(s => [s.home.address, s.score]));
 
     const medianComp = Utils.median(comps.map(h => h.sale_price));
     const assessedDiff = listing.total_assessed && listing.list_price
@@ -520,7 +509,7 @@ const Listings = {
           <div class="comp-subject-info">
             <h4><a href="${listing.redfin_url || '#'}" target="_blank" rel="noopener">${listing.address}</a></h4>
             <p>${listing.city} ${listing.zip_code} \u00b7 ${listing.beds}bd/${listing.baths}ba \u00b7 ${Utils.formatNumber(listing.sqft)} sqft</p>
-            <p class="comp-price">Asking: ${Utils.formatCurrency(listing.list_price)}</p>
+            <p class="comp-price">Asking: ${Utils.formatCurrency(listing.list_price)} ${Utils.visualQualityBadge(listing)}</p>
           </div>
         </div>
         <div class="comp-metrics">
@@ -544,19 +533,20 @@ const Listings = {
       <div id="ls-comp-map" class="comp-map"></div>
       ${comps.length > 0 ? `
         <table class="data-table comp-table"><thead><tr>
-          <th class="photo-preview-cell"></th><th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
+          <th class="photo-preview-cell"></th><th>Match</th><th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
         </tr></thead><tbody>
-          ${comps.slice(0, 15).map(c => `<tr>
+          ${comps.slice(0, 15).map(c => { const sc = scoreMap.get(c.address) || 0; return `<tr>
             ${MapUtils.PHOTO_BTN_HTML}
+            <td><span class="match-badge ${Utils.similarityBadgeClass(sc)}">${sc}%</span></td>
             <td>${Utils.formatDate(c.sold_date)}</td>
             <td class="addr-cell"><a href="${c.redfin_url || '#'}" target="_blank" rel="noopener">${c.address}</a></td>
             <td>${Utils.formatCurrency(c.sale_price)}</td>
             <td>${Utils.formatCurrency(c.price_per_sqft)}</td>
             <td>${Utils.formatNumber(c.sqft)}</td>
             <td>${c.beds}/${c.baths}</td>
-          </tr>`).join('')}
+          </tr>`; }).join('')}
         </tbody></table>
-      ` : '<p class="empty-state">No comparable recent sales found in the same zip code with similar specs.</p>'}
+      ` : '<p class="empty-state">No comparable recent sales found with similar characteristics.</p>'}
     `;
 
     document.getElementById('ls-comp-card').style.display = 'block';

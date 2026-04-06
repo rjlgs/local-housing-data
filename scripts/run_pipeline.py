@@ -77,6 +77,13 @@ POST_STEPS = [
     },
 ]
 
+# Optional step that requires extra dependencies (CLIP + torch)
+VISUAL_QUALITY_STEP = {
+    "name": "Visual Quality Assessment",
+    "script": "assess_visual_quality.py",
+    "description": "Score property photos using CLIP embeddings",
+}
+
 # Shorthand aliases for --tier
 TIER_ALIASES = {
     "active": "active_listings",
@@ -156,6 +163,10 @@ def main():
         help="Skip the county parcels pull (legacy flag)"
     )
     parser.add_argument(
+        "--skip-visual-quality", action="store_true",
+        help="Skip visual quality assessment (requires CLIP dependencies)"
+    )
+    parser.add_argument(
         "--sold-days", type=int, default=None,
         help="Override sold-within-days for Redfin sold homes (default: 90)"
     )
@@ -185,7 +196,8 @@ def main():
     for tier in tiers_to_run:
         ingest_steps.extend([(tier, s) for s in TIER_STEPS[tier]])
 
-    total_steps = len(ingest_steps) + len(POST_STEPS)
+    vq_steps = 0 if args.skip_visual_quality else 1
+    total_steps = len(ingest_steps) + len(POST_STEPS) + vq_steps
 
     # Run ingest steps
     for tier, step in ingest_steps:
@@ -205,6 +217,21 @@ def main():
             print(f"     {step['description']}")
             if not run_step(step, args):
                 failures.append(step["name"])
+
+        # Visual quality assessment (optional, requires CLIP dependencies)
+        if not args.skip_visual_quality:
+            step_num += 1
+            step = VISUAL_QUALITY_STEP
+            print(f"[{step_num}/{total_steps}] {step['name']}")
+            print(f"     {step['description']}")
+            if run_step(step, args):
+                # Re-run build to attach visual quality scores to dashboard_data.json
+                print(f"[{step_num}/{total_steps}] Rebuilding dashboard data with visual quality scores...")
+                rebuild_step = POST_STEPS[-1]  # Build Dashboard Data
+                if not run_step(rebuild_step, args):
+                    failures.append("Rebuild Dashboard Data")
+            else:
+                print("  Visual quality assessment failed (missing dependencies?). Continuing.\n")
     else:
         print("All ingest steps failed. Skipping combine and build.\n")
 

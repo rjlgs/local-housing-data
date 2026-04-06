@@ -349,15 +349,9 @@ const PropertyExplorer = {
   },
 
   _showComps(home) {
-    const sqft = home.sqft || 0;
-    const beds = home.beds || 0;
-    const comps = this._allHomes.filter(h =>
-      h.address !== home.address &&
-      h.zip_code === home.zip_code &&
-      h.beds != null && Math.abs(h.beds - beds) <= 1 &&
-      h.sqft != null && h.sqft >= sqft * 0.75 && h.sqft <= sqft * 1.25 &&
-      h.sale_price != null
-    );
+    const scoredComps = Utils.findComps(home, this._allHomes);
+    const comps = scoredComps.map(s => s.home);
+    const scoreMap = new Map(scoredComps.map(s => [s.home.address, s.score]));
 
     const medianComp = Utils.median(comps.map(h => h.sale_price));
     const assessedDiff = home.total_assessed && home.sale_price
@@ -373,7 +367,7 @@ const PropertyExplorer = {
           <div class="comp-subject-info">
             <h4><a href="${this._zillowUrl(home)}" target="_blank" rel="noopener">${home.address}</a></h4>
             <p>${home.city} ${home.zip_code} · ${home.beds}bd/${home.baths}ba · ${Utils.formatNumber(home.sqft)} sqft</p>
-            <p class="comp-price">Sold: ${Utils.formatCurrency(home.sale_price)} ${home.sold_date ? `on ${Utils.formatDate(home.sold_date)}` : ''}</p>
+            <p class="comp-price">Sold: ${Utils.formatCurrency(home.sale_price)} ${home.sold_date ? `on ${Utils.formatDate(home.sold_date)}` : ''} ${Utils.visualQualityBadge(home)}</p>
           </div>
         </div>
         <div class="comp-metrics">
@@ -396,19 +390,20 @@ const PropertyExplorer = {
       <div id="comp-hover-map" class="comp-map"></div>
       ${comps.length > 0 ? `
         <table class="data-table comp-table"><thead><tr>
-          <th class="photo-preview-cell"></th><th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
+          <th class="photo-preview-cell"></th><th>Match</th><th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
         </tr></thead><tbody>
-          ${comps.slice(0, 15).map(c => `<tr>
+          ${comps.slice(0, 15).map(c => { const sc = scoreMap.get(c.address) || 0; return `<tr>
             ${MapUtils.PHOTO_BTN_HTML}
+            <td><span class="match-badge ${Utils.similarityBadgeClass(sc)}">${sc}%</span></td>
             <td>${Utils.formatDate(c.sold_date)}</td>
             <td><a href="${this._zillowUrl(c)}" target="_blank" rel="noopener">${c.address}</a></td>
             <td>${Utils.formatCurrency(c.sale_price)}</td>
             <td>${Utils.formatCurrency(c.price_per_sqft)}</td>
             <td>${Utils.formatNumber(c.sqft)}</td>
             <td>${c.beds}/${c.baths}</td>
-          </tr>`).join('')}
+          </tr>`; }).join('')}
         </tbody></table>
-      ` : '<p class="empty-state">No comparable sales found in the same zip code with similar specs.</p>'}
+      ` : '<p class="empty-state">No comparable sales found with similar characteristics.</p>'}
     `;
 
     document.getElementById('comp-hover-card').style.display = 'block';

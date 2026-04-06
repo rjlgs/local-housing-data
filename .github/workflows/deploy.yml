@@ -11,6 +11,11 @@ on:
         default: ''
         type: choice
         options: ['', active, sold, trends, county, all]
+      visual_quality:
+        description: 'Run visual quality assessment (requires ~2GB CLIP download)'
+        required: false
+        default: false
+        type: boolean
   push:
     branches: [main]
     paths: ['dashboard/**', 'scripts/**', 'config.json']
@@ -41,17 +46,27 @@ jobs:
           key: pipeline-data-${{ github.run_id }}
           restore-keys: pipeline-data-
 
+      # Install CLIP dependencies if visual quality is enabled
+      - name: Install visual quality dependencies
+        if: inputs.visual_quality == true
+        run: pip install -r requirements.txt
+
       # Run the data pipeline
       - name: Run pipeline
         run: |
+          VQ_FLAG=""
+          if [ "${{ inputs.visual_quality }}" != "true" ]; then
+            VQ_FLAG="--skip-visual-quality"
+          fi
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tier }}" ]; then
             if [ "${{ inputs.tier }}" = "all" ]; then
-              python3 scripts/run_pipeline.py
+              python3 scripts/run_pipeline.py $VQ_FLAG
             else
-              python3 scripts/run_pipeline.py --tier "${{ inputs.tier }}"
+              python3 scripts/run_pipeline.py --tier "${{ inputs.tier }}" $VQ_FLAG
             fi
           else
-            python3 scripts/run_pipeline.py --if-stale
+            python3 scripts/run_pipeline.py --if-stale $VQ_FLAG
           fi
 
       # Save cache (always, so partial data persists across runs)
