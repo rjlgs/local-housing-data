@@ -291,6 +291,17 @@ const Utils = {
     return 'match-low';
   },
 
+  aestheticScore100(home) {
+    if (home.vq_aesthetic == null) return null;
+    return Math.round(Math.max(0, Math.min(100, home.vq_aesthetic * 10)));
+  },
+
+  aestheticScoreBadge(home) {
+    const s = Utils.aestheticScore100(home);
+    if (s == null) return '\u2014';
+    return `<span class="match-badge ${Utils.similarityBadgeClass(s)}">${s}</span>`;
+  },
+
   visualQualityBadge(home) {
     const vq = home.visual_quality;
     if (vq == null) return '';
@@ -592,6 +603,8 @@ const MapUtils = {
     if (f.yearMin) r = r.filter(h => h.year_built != null && h.year_built >= Number(f.yearMin));
     if (f.yearMax) r = r.filter(h => h.year_built != null && h.year_built <= Number(f.yearMax));
     if (f.type) r = r.filter(h => h.property_type === f.type);
+    if (f.aestheticMin) r = r.filter(h => { const s = Utils.aestheticScore100(h); return s != null && s >= Number(f.aestheticMin); });
+    if (f.aestheticMax) r = r.filter(h => { const s = Utils.aestheticScore100(h); return s != null && s <= Number(f.aestheticMax); });
     return r;
   },
 

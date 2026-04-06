@@ -38,6 +38,7 @@ const Listings = {
     { col: 'baths', label: 'Ba' },
     { col: 'year_built', label: 'Year' },
     { col: 'days_on_market', label: 'DOM' },
+    { col: 'vq_aesthetic', label: 'Aesthetic' },
     { col: 'visual_quality', label: 'VQ' },
   ],
 
@@ -135,6 +136,13 @@ const Listings = {
           </div>
         </div>
         <div class="filter-cluster">
+          <div class="filter-cluster-label">Aesthetic</div>
+          <div class="filter-cluster-row">
+            <div class="filter-group"><label>Min</label><input type="number" id="ls-filter-aesthetic-min" min="0" max="100" step="5"></div>
+            <div class="filter-group"><label>Max</label><input type="number" id="ls-filter-aesthetic-max" min="0" max="100" step="5"></div>
+          </div>
+        </div>
+        <div class="filter-cluster">
           <div class="filter-cluster-label">HOA</div>
           <div class="filter-cluster-row">
             <div class="filter-group">
@@ -219,6 +227,8 @@ const Listings = {
     if (saved.yearMax) document.getElementById('ls-filter-year-max').value = saved.yearMax;
     if (saved.type) document.getElementById('ls-filter-type').value = saved.type;
     if (saved.status) document.getElementById('ls-filter-status').value = saved.status;
+    if (saved.aestheticMin) document.getElementById('ls-filter-aesthetic-min').value = saved.aestheticMin;
+    if (saved.aestheticMax) document.getElementById('ls-filter-aesthetic-max').value = saved.aestheticMax;
 
     // Bind events
     document.getElementById('ls-filter-apply').addEventListener('click', () => this._applyFilters(focusAreas));
@@ -304,6 +314,8 @@ const Listings = {
       yearMax: document.getElementById('ls-filter-year-max').value,
       type: document.getElementById('ls-filter-type').value,
       status: document.getElementById('ls-filter-status').value,
+      aestheticMin: document.getElementById('ls-filter-aesthetic-min').value,
+      aestheticMax: document.getElementById('ls-filter-aesthetic-max').value,
     };
   },
 
@@ -314,6 +326,7 @@ const Listings = {
     ['ls-filter-beds-min','ls-filter-beds-max','ls-filter-baths-min','ls-filter-baths-max',
      'ls-filter-sqft-min','ls-filter-sqft-max','ls-filter-price-min','ls-filter-price-max',
      'ls-filter-hoa','ls-filter-year-min','ls-filter-year-max','ls-filter-type','ls-filter-status',
+     'ls-filter-aesthetic-min','ls-filter-aesthetic-max',
     ].forEach(id => document.getElementById(id).value = '');
     this._customPolygon = null;
     this._disableDraw();
@@ -395,6 +408,7 @@ const Listings = {
           <td>${h.baths ?? '\u2014'}</td>
           <td>${h.year_built ?? '\u2014'}</td>
           <td>${h.days_on_market ?? '\u2014'}</td>
+          <td>${Utils.aestheticScoreBadge(h)}</td>
           <td>${Utils.visualQualityBadge(h)}</td>
         </tr>
       `;
