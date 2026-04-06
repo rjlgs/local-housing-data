@@ -208,6 +208,10 @@
     {"region_id": "34317", "name": "Ruffin"},
     {"region_id": "6368", "name": "Franklinville"}
   ],
+  "jsonbin": {
+    "master_bin_id": "69d31b2e36566621a881aeec",
+    "api_key": "$2a$10$mDkfvAUQPA31zFMbJcOX8uLiFrIAGTBHeBd6gkc2IQrFpsDGs17Zm"
+  },
   "county_parcels": {
     "enabled": true,
     "source_name": "Guilford County",

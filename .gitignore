@@ -17,9 +17,6 @@ build/
 .env
 .env.*
 
-# JSONBin credentials (secret)
-jsonbin.json
-
 # macOS
 .DS_Store
 
