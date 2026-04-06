@@ -855,7 +855,7 @@ const SyncClient = {
     }
 
     // Create new bin for this user
-    const newBinId = await this._createBin({ favorites: {}, downvotes: {} }, `user-${email}`);
+    const newBinId = await this._createBin({ favorites: {}, downvotes: {}, _created: new Date().toISOString() }, `user-${email}`);
     // Register in master index
     master[email] = newBinId;
     await this._updateBin(this._masterBinId, master);
