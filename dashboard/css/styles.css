@@ -44,19 +44,7 @@ body {
   margin-left: auto;
 }
 
-.btn-reset {
-  padding: 0.3rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--surface);
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color 0.15s, border-color 0.15s;
-}
 
-.btn-reset:hover { color: var(--red); border-color: var(--red); }
 
 /* === Email sign-in modal === */
 .email-modal {
@@ -1352,6 +1340,28 @@ body {
     flex-shrink: 0;
   }
 
+  .user-email-display {
+    margin-left: auto;
+    font-size: 0.7rem;
+    max-width: 40%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #user-email-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+    display: inline-block;
+    vertical-align: middle;
+  }
+
+  .btn-signout {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.5rem;
+    flex-shrink: 0;
+  }
+
   .tab-content {
     padding: 1rem;
   }
@@ -1581,6 +1591,21 @@ body {
     font-size: 0.9375rem;
   }
 
+  .user-email-display {
+    font-size: 0.65rem;
+    max-width: 35%;
+    gap: 0.3rem;
+  }
+
+  #user-email-text {
+    max-width: 80px;
+  }
+
+  .btn-signout {
+    font-size: 0.65rem;
+    padding: 0.2rem 0.4rem;
+  }
+
   .tab-content {
     padding: 0.75rem;
   }
@@ -1756,7 +1781,7 @@ body {
 
   .btn-primary,
   .btn-secondary,
-  .btn-reset,
+  .btn-signout,
   .btn-learn-more {
     min-height: 44px;
     display: inline-flex;
