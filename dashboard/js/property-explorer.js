@@ -33,6 +33,7 @@ const PropertyExplorer = {
     { col: 'beds', label: 'Bd' },
     { col: 'baths', label: 'Ba' },
     { col: 'year_built', label: 'Year' },
+    { col: 'visual_quality', label: 'VQ' },
   ],
 
   init(container, data) {
@@ -328,6 +329,7 @@ const PropertyExplorer = {
         <td>${h.beds ?? '—'}</td>
         <td>${h.baths ?? '—'}</td>
         <td>${h.year_built ?? '—'}</td>
+        <td>${Utils.visualQualityBadge(h)}</td>
       </tr>
     `).join('');
 

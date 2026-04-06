@@ -38,6 +38,7 @@ const Listings = {
     { col: 'baths', label: 'Ba' },
     { col: 'year_built', label: 'Year' },
     { col: 'days_on_market', label: 'DOM' },
+    { col: 'visual_quality', label: 'VQ' },
   ],
 
   init(container, data) {
@@ -394,6 +395,7 @@ const Listings = {
           <td>${h.baths ?? '\u2014'}</td>
           <td>${h.year_built ?? '\u2014'}</td>
           <td>${h.days_on_market ?? '\u2014'}</td>
+          <td>${Utils.visualQualityBadge(h)}</td>
         </tr>
       `;
     }).join('');

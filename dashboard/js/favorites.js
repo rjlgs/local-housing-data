@@ -26,6 +26,7 @@ const Favorites = {
     { col: 'beds', label: 'Bd' },
     { col: 'baths', label: 'Ba' },
     { col: 'year_built', label: 'Year' },
+    { col: 'visual_quality', label: 'VQ' },
     { col: null, label: 'Status', sortable: false },
   ],
 
@@ -165,6 +166,7 @@ const Favorites = {
           <td>${d.beds ?? '\u2014'}</td>
           <td>${d.baths ?? '\u2014'}</td>
           <td>${d.year_built ?? '\u2014'}</td>
+          <td>${Utils.visualQualityBadge(d)}</td>
           <td>${statusBadge}</td>
         </tr>
       `;
