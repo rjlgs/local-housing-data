@@ -122,13 +122,15 @@
 
     // Session init: prompt for email if needed, sync with JSONBin
     async function initSession() {
-      // Load jsonbin config
+      // Load jsonbin config (separate file, gitignored to keep API key private)
       try {
-        const cfgResp = await fetch('../config.json');
-        const cfg = await cfgResp.json();
-        SyncClient.init(cfg.jsonbin);
+        const cfgResp = await fetch('../jsonbin.json');
+        if (cfgResp.ok) {
+          const cfg = await cfgResp.json();
+          SyncClient.init(cfg);
+        }
       } catch (err) {
-        console.warn('Could not load config.json for sync:', err);
+        console.warn('Could not load jsonbin.json for sync:', err);
       }
 
       // If sync is not configured, skip email prompt entirely
