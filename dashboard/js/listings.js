@@ -24,8 +24,9 @@ const Listings = {
   NEW_DAYS: 3,
 
   _headers: [
-    { col: null, label: '\u2606', sortable: false },
+    { col: null, label: '', sortable: false },
     { col: 'first_seen', label: 'Listed' },
+    { col: 'visual_quality', label: 'VQ' },
     { col: 'address', label: 'Address' },
     { col: 'city', label: 'City' },
     { col: 'list_price', label: 'Price' },
@@ -38,8 +39,6 @@ const Listings = {
     { col: 'baths', label: 'Ba' },
     { col: 'year_built', label: 'Year' },
     { col: 'days_on_market', label: 'DOM' },
-    { col: 'vq_aesthetic', label: 'Aesthetic' },
-    { col: 'visual_quality', label: 'VQ' },
   ],
 
   init(container, data) {
@@ -393,9 +392,10 @@ const Listings = {
       const isDown = DownvoteStore.isDownvoted(h.address);
       return `
         <tr class="clickable-row${isDown ? ' downvoted-row' : ''}" data-addr="${(h.address || '').replace(/"/g, '&quot;')}">
-          <td><button class="btn-fav${isFav ? ' active' : ''}" data-fav-addr="${(h.address || '').replace(/"/g, '&quot;')}" title="${isFav ? 'Remove from favorites' : 'Add to favorites'}">${isFav ? '&#9733;' : '&#9734;'}</button><button class="btn-downvote${isDown ? ' active' : ''}" data-down-addr="${(h.address || '').replace(/"/g, '&quot;')}" title="${isDown ? 'Remove rule-out' : 'Rule out this listing'}">&#10005;</button></td>
+          <td><button class="btn-fav${isFav ? ' active' : ''}" data-fav-addr="${(h.address || '').replace(/"/g, '&quot;')}" title="${isFav ? 'Remove from favorites' : 'Add to favorites'}">${isFav ? '&#9733;' : '&#9734;'}</button><button class="btn-downvote${isDown ? ' active' : ''}" data-down-addr="${(h.address || '').replace(/"/g, '&quot;')}" title="${isDown ? 'Remove rule-out' : 'Rule out this listing'}">${isDown ? '&#8634;' : '&#10005;'}</button></td>
           ${MapUtils.PHOTO_BTN_HTML}
           <td>${Utils.formatDate(h.first_seen)} ${badges.join(' ')}</td>
+          <td>${Utils.visualQualityBadge(h)}</td>
           <td class="addr-cell"><a href="${h.redfin_url || '#'}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${h.address || '\u2014'}</a></td>
           <td>${h.city || '\u2014'}</td>
           <td>${Utils.formatCurrency(h.list_price)}</td>
@@ -408,8 +408,6 @@ const Listings = {
           <td>${h.baths ?? '\u2014'}</td>
           <td>${h.year_built ?? '\u2014'}</td>
           <td>${h.days_on_market ?? '\u2014'}</td>
-          <td>${Utils.aestheticScoreBadge(h)}</td>
-          <td>${Utils.visualQualityBadge(h)}</td>
         </tr>
       `;
     }).join('');
@@ -549,11 +547,12 @@ const Listings = {
       <div id="ls-comp-map" class="comp-map"></div>
       ${comps.length > 0 ? `
         <table class="data-table comp-table"><thead><tr>
-          <th class="photo-preview-cell"></th><th>Match</th><th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
+          <th class="photo-preview-cell"></th><th>Match</th><th>VQ</th><th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
         </tr></thead><tbody>
           ${comps.slice(0, 15).map(c => { const sc = scoreMap.get(c.address) || 0; return `<tr>
             ${MapUtils.PHOTO_BTN_HTML}
             <td><span class="match-badge ${Utils.similarityBadgeClass(sc)}">${sc}%</span></td>
+            <td>${Utils.visualQualityBadge(c)}</td>
             <td>${Utils.formatDate(c.sold_date)}</td>
             <td class="addr-cell"><a href="${c.redfin_url || '#'}" target="_blank" rel="noopener">${c.address}</a></td>
             <td>${Utils.formatCurrency(c.sale_price)}</td>

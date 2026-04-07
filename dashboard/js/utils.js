@@ -951,7 +951,7 @@ const SyncClient = {
   _headers() {
     return {
       'Content-Type': 'application/json',
-      'X-Master-Key': this._apiKey,
+      'X-Access-Key': this._apiKey,
     };
   },
 

@@ -800,6 +800,14 @@ body {
   white-space: nowrap;
 }
 
+/* Left-align VQ column in tables */
+#ls-results-table-wrap .data-table td:nth-child(4),
+#fav-results-table-wrap .data-table td:nth-child(3),
+#results-table-wrap .data-table td:nth-child(3),
+.comp-table td:nth-child(3) {
+  text-align: left;
+}
+
 .data-table tbody tr:hover { background: #f9fafb; }
 
 .table-scroll { overflow-x: auto; margin-bottom: 1rem; }
@@ -1221,11 +1229,19 @@ body {
 .btn-downvote.active { color: #ef4444; }
 
 /* Downvoted / ruled-out row */
-.downvoted-row { opacity: 0.55; }
-.downvoted-row:hover { opacity: 0.75; }
-.downvoted-row td { text-decoration: line-through; text-decoration-color: #94a3b8; }
+.downvoted-row { opacity: 0.4; }
+.downvoted-row:hover { opacity: 0.65; }
+.downvoted-row td {
+  text-decoration: line-through;
+  text-decoration-color: #64748b;
+  text-decoration-thickness: 1px;
+}
 .downvoted-row td:first-child { text-decoration: none; }
-.downvoted-row td a { text-decoration: line-through; text-decoration-color: #94a3b8; }
+.downvoted-row td a {
+  text-decoration: line-through;
+  text-decoration-color: #64748b;
+  text-decoration-thickness: 1px;
+}
 
 /* Downvote badge */
 .badge-downvote { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }

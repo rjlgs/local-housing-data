@@ -14,8 +14,9 @@ const Favorites = {
   _activeListings: [],
 
   _headers: [
-    { col: null, label: '\u2606', sortable: false },
+    { col: null, label: '', sortable: false },
     { col: 'favorited_at', label: 'Saved' },
+    { col: 'visual_quality', label: 'VQ' },
     { col: 'address', label: 'Address' },
     { col: 'city', label: 'City' },
     { col: 'list_price', label: 'Price' },
@@ -26,7 +27,6 @@ const Favorites = {
     { col: 'beds', label: 'Bd' },
     { col: 'baths', label: 'Ba' },
     { col: 'year_built', label: 'Year' },
-    { col: 'visual_quality', label: 'VQ' },
     { col: null, label: 'Status', sortable: false },
   ],
 
@@ -156,6 +156,7 @@ const Favorites = {
         <tr class="clickable-row${item.delisted ? ' fav-delisted-row' : ''}" data-addr="${(d.address || '').replace(/"/g, '&quot;')}">
           <td><button class="btn-fav active" data-fav-addr="${(d.address || '').replace(/"/g, '&quot;')}" title="Remove from favorites">&#9733;</button></td>
           <td>${Utils.formatDate(item.favorited_at)}</td>
+          <td>${Utils.visualQualityBadge(d)}</td>
           <td class="addr-cell"><a href="${d.redfin_url || '#'}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${d.address || '\u2014'}</a></td>
           <td>${d.city || '\u2014'}</td>
           <td>${Utils.formatCurrency(d.list_price)}</td>
@@ -166,7 +167,6 @@ const Favorites = {
           <td>${d.beds ?? '\u2014'}</td>
           <td>${d.baths ?? '\u2014'}</td>
           <td>${d.year_built ?? '\u2014'}</td>
-          <td>${Utils.visualQualityBadge(d)}</td>
           <td>${statusBadge}</td>
         </tr>
       `;

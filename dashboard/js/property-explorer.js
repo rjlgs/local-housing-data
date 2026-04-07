@@ -22,6 +22,7 @@ const PropertyExplorer = {
 
   _headers: [
     { col: 'sold_date', label: 'Sold' },
+    { col: 'visual_quality', label: 'VQ' },
     { col: 'address', label: 'Address' },
     { col: 'city', label: 'City' },
     { col: 'neighborhood', label: 'Neighborhood' },
@@ -33,7 +34,6 @@ const PropertyExplorer = {
     { col: 'beds', label: 'Bd' },
     { col: 'baths', label: 'Ba' },
     { col: 'year_built', label: 'Year' },
-    { col: 'visual_quality', label: 'VQ' },
   ],
 
   init(container, data) {
@@ -312,6 +312,7 @@ const PropertyExplorer = {
       <tr class="clickable-row" data-addr="${(h.address || '').replace(/"/g, '&quot;')}">
         ${MapUtils.PHOTO_BTN_HTML}
         <td>${Utils.formatDate(h.sold_date)}</td>
+        <td>${Utils.visualQualityBadge(h)}</td>
         <td class="addr-cell"><a href="${this._zillowUrl(h)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${h.address || '—'}</a></td>
         <td>${h.city || '—'}</td>
         <td>${h.neighborhood || '—'}</td>
@@ -329,7 +330,6 @@ const PropertyExplorer = {
         <td>${h.beds ?? '—'}</td>
         <td>${h.baths ?? '—'}</td>
         <td>${h.year_built ?? '—'}</td>
-        <td>${Utils.visualQualityBadge(h)}</td>
       </tr>
     `).join('');
 
@@ -392,11 +392,12 @@ const PropertyExplorer = {
       <div id="comp-hover-map" class="comp-map"></div>
       ${comps.length > 0 ? `
         <table class="data-table comp-table"><thead><tr>
-          <th class="photo-preview-cell"></th><th>Match</th><th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
+          <th class="photo-preview-cell"></th><th>Match</th><th>VQ</th><th>Sold</th><th>Address</th><th>Price</th><th>$/SqFt</th><th>SqFt</th><th>Bd/Ba</th>
         </tr></thead><tbody>
           ${comps.slice(0, 15).map(c => { const sc = scoreMap.get(c.address) || 0; return `<tr>
             ${MapUtils.PHOTO_BTN_HTML}
             <td><span class="match-badge ${Utils.similarityBadgeClass(sc)}">${sc}%</span></td>
+            <td>${Utils.visualQualityBadge(c)}</td>
             <td>${Utils.formatDate(c.sold_date)}</td>
             <td><a href="${this._zillowUrl(c)}" target="_blank" rel="noopener">${c.address}</a></td>
             <td>${Utils.formatCurrency(c.sale_price)}</td>

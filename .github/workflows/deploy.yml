@@ -11,8 +11,8 @@ on:
         default: ''
         type: choice
         options: ['', active, sold, trends, county, all]
-      visual_quality:
-        description: 'Run visual quality assessment (requires ~2GB CLIP download)'
+      skip_visual_quality:
+        description: 'Skip visual quality assessment (VQ runs by default)'
         required: false
         default: false
         type: boolean
@@ -46,16 +46,15 @@ jobs:
           key: pipeline-data-${{ github.run_id }}
           restore-keys: pipeline-data-
 
-      # Install CLIP dependencies if visual quality is enabled
-      - name: Install visual quality dependencies
-        if: inputs.visual_quality == true
+      # Install CLIP dependencies (VQ enabled by default)
+      - name: Install dependencies
         run: pip install -r requirements.txt
 
       # Run the data pipeline
       - name: Run pipeline
         run: |
           VQ_FLAG=""
-          if [ "${{ inputs.visual_quality }}" != "true" ]; then
+          if [ "${{ inputs.skip_visual_quality }}" = "true" ]; then
             VQ_FLAG="--skip-visual-quality"
           fi
 
