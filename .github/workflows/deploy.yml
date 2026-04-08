@@ -18,7 +18,7 @@ on:
         type: boolean
   push:
     branches: [main]
-    paths: ['dashboard/**', 'scripts/**', 'config.json']
+    paths: ['dashboard/**', 'scripts/**', 'config.json', '.github/workflows/**']
 
 permissions:
   contents: read
