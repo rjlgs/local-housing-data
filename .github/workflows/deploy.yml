@@ -80,6 +80,7 @@ jobs:
         run: |
           mkdir -p _site/dashboard _site/data
           cp index.html _site/
+          cp config.json _site/
           cp -r dashboard/* _site/dashboard/
           cp data/dashboard_data.json _site/data/
           [ -f data/zcta_boundaries.geojson ] && cp data/zcta_boundaries.geojson _site/data/ || true
