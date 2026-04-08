@@ -30,7 +30,7 @@ const Listings = {
     { col: 'address', label: 'Address' },
     { col: 'city', label: 'City' },
     { col: 'list_price', label: 'Price' },
-    { col: null, label: 'Value', sortable: false },
+    { col: null, label: 'Value<span class="info-icon" data-tooltip="Asking price vs median of recent sold comps in the same zip with similar specs">i</span>', sortable: false },
     { col: 'price_change', label: 'Price \u0394' },
     { col: 'hoa_monthly', label: 'HOA/mo' },
     { col: 'price_per_sqft', label: '$/SqFt' },
@@ -367,10 +367,10 @@ const Listings = {
       <span>Median: <strong>${Utils.formatCurrency(Utils.median(prices))}</strong></span>
       <span>Median SqFt: <strong>${Utils.formatNumber(Utils.median(sqfts))}</strong></span>
       <span>Median $/SqFt: <strong>${Utils.formatCurrency(Utils.median(listings.map(h => h.price_per_sqft).filter(v => v != null)))}</strong></span>
-      ${newCount > 0 ? `<span class="badge badge-new">${newCount} new</span>` : ''}
-      ${dropCount > 0 ? `<span class="badge badge-drop">${dropCount} price drops</span>` : ''}
-      ${(() => { const fc = listings.filter(h => FavoritesStore.isFavorited(h.address)).length; return fc > 0 ? `<span class="badge badge-fav">${fc} favorited</span>` : ''; })()}
-      ${(() => { const dc = listings.filter(h => DownvoteStore.isDownvoted(h.address)).length; return dc > 0 ? `<span class="badge badge-downvote">${dc} ruled out</span>` : ''; })()}
+      ${newCount > 0 ? `<span class="badge badge-new" title="Listed within the last 3 days">${newCount} new</span>` : ''}
+      ${dropCount > 0 ? `<span class="badge badge-drop" title="Asking price has been reduced since first listed">${dropCount} price drops</span>` : ''}
+      ${(() => { const fc = listings.filter(h => FavoritesStore.isFavorited(h.address)).length; return fc > 0 ? `<span class="badge badge-fav" title="Listings you've marked as favorites">${fc} favorited</span>` : ''; })()}
+      ${(() => { const dc = listings.filter(h => DownvoteStore.isDownvoted(h.address)).length; return dc > 0 ? `<span class="badge badge-downvote" title="Listings you've ruled out">${dc} ruled out</span>` : ''; })()}
     `;
 
     MapUtils.sortData(listings, this._sort.col, this._sort.asc);
@@ -379,8 +379,8 @@ const Listings = {
 
     const rowsHtml = display.map(h => {
       const badges = [];
-      if (this._isNew(h)) badges.push('<span class="badge badge-new">NEW</span>');
-      if (h.price_change && h.price_change < 0) badges.push('<span class="badge badge-drop">DROP</span>');
+      if (this._isNew(h)) badges.push('<span class="badge badge-new" title="Listed within the last 3 days">NEW</span>');
+      if (h.price_change && h.price_change < 0) badges.push('<span class="badge badge-drop" title="Asking price has been reduced since first listed">DROP</span>');
       const valueHtml = this._valueIndicator(h);
       let priceChangeHtml = '\u2014';
       if (h.price_change && h.price_change !== 0) {

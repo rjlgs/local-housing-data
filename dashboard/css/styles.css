@@ -769,7 +769,13 @@ body {
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.15s;
-  z-index: 10;
+  z-index: 1001;
+}
+
+/* Info icon in table headers - show tooltip below */
+.data-table th .info-icon::after {
+  bottom: auto;
+  top: calc(100% + 6px);
 }
 
 .info-icon:hover::after { opacity: 1; }
@@ -792,6 +798,7 @@ body {
   padding: 0.5rem 0.625rem;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
+  position: relative;
 }
 
 .data-table td {
