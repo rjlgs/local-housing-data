@@ -5,17 +5,22 @@ Ingest Redfin market-level data for a configured metro area.
 Downloads the city and zip-code level TSV files from Redfin's public S3 bucket,
 filters to the configured metro, and saves as CSV.
 
+Supports incremental updates: uses HTTP ETags to skip download if S3 files
+haven't changed since the last fetch. Use --full to force re-download.
+
 NOTE: These files are ~1-1.5 GB compressed. We stream via curl | gunzip and
 read line-by-line to avoid loading everything into memory. A progress counter
 prints every 500K lines so you know it's working.
 """
 
+import argparse
 import csv
 import io
 import json
 import os
 import subprocess
 import sys
+import urllib.request
 
 S3_BASE = "https://redfin-public-data.s3.us-west-2.amazonaws.com/redfin_market_tracker"
 
@@ -43,6 +48,30 @@ KEEP_COLUMNS = [
 
 # How often to print a progress update (every N lines scanned)
 PROGRESS_INTERVAL = 500_000
+
+
+def load_etag_cache(cache_path):
+    """Load cached ETags from previous runs."""
+    if os.path.exists(cache_path):
+        with open(cache_path, "r") as f:
+            return json.load(f)
+    return {}
+
+
+def save_etag_cache(cache, cache_path):
+    """Save ETags for future runs."""
+    with open(cache_path, "w") as f:
+        json.dump(cache, f, indent=2)
+
+
+def check_etag(url):
+    """Fetch the ETag for a URL via HEAD request."""
+    try:
+        req = urllib.request.Request(url, method="HEAD")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.headers.get("ETag", "").strip('"')
+    except Exception:
+        return None
 
 
 def stream_and_filter(url, level, metro_code, metro_name):
@@ -115,18 +144,42 @@ def stream_and_filter(url, level, metro_code, metro_name):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Ingest Redfin market data")
+    parser.add_argument("--full", action="store_true",
+                        help="Force full re-download even if data hasn't changed")
+    args = parser.parse_args()
+
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
     data_dir = os.path.join(project_root, "data")
     os.makedirs(data_dir, exist_ok=True)
+
+    etag_cache_path = os.path.join(data_dir, "redfin_market_etags.json")
+    etag_cache = load_etag_cache(etag_cache_path)
 
     with open(os.path.join(project_root, "config.json")) as f:
         config = json.load(f)
     metro_code = config["metro"]["redfin_metro_code"]
     metro_name = config["metro"]["name"]
 
+    any_updated = False
+
     for level, url in DATASETS.items():
         print(f"\nProcessing {level}-level Redfin data...")
+        output_path = os.path.join(data_dir, f"redfin_market_{level}.csv")
+
+        # Check ETag to see if data has changed
+        if not args.full:
+            current_etag = check_etag(url)
+            cached_etag = etag_cache.get(level, {}).get("etag")
+
+            if current_etag and current_etag == cached_etag and os.path.exists(output_path):
+                print(f"  Data unchanged (ETag match). Skipping download.")
+                continue
+
+            if current_etag:
+                etag_cache[level] = {"etag": current_etag, "url": url}
+
         rows = stream_and_filter(url, level, metro_code, metro_name)
         print(f"  Found {len(rows):,} {metro_name} metro records.")
 
@@ -134,7 +187,6 @@ def main():
             print(f"  WARNING: No data found for {level}. Skipping.")
             continue
 
-        output_path = os.path.join(data_dir, f"redfin_market_{level}.csv")
         fieldnames = [k for k in KEEP_COLUMNS if k in rows[0]]
 
         with open(output_path, "w", newline="", encoding="utf-8") as f:
@@ -143,8 +195,15 @@ def main():
             writer.writerows(rows)
 
         print(f"  Saved to {output_path}")
+        any_updated = True
 
-    print("\nDone.")
+    # Save ETag cache
+    save_etag_cache(etag_cache, etag_cache_path)
+
+    if any_updated:
+        print("\nDone - data updated.")
+    else:
+        print("\nDone - no updates needed (all data current).")
 
 
 if __name__ == "__main__":

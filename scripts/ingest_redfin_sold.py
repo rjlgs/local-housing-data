@@ -6,10 +6,15 @@ Uses Redfin's public CSV download endpoint (same as the website's "Download All"
 button). Iterates over each city in the metro, splitting by property type where
 needed to stay under the 350-row-per-request limit.
 
+Supports incremental updates: on subsequent runs, only fetches recent sales
+and merges with existing data (deduplicating by MLS#). Use --full to force
+a complete refresh.
+
 Pagination via page_number does NOT work (returns duplicate data), so we
 use city + property-type splitting and short time windows instead.
 """
 
+import argparse
 import csv
 import io
 import json
@@ -18,7 +23,7 @@ import sys
 import time
 import urllib.request
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, date, timedelta
 
 BASE_URL = "https://www.redfin.com/stingray/api/gis-csv"
 
@@ -132,14 +137,40 @@ def fetch_city(region_id, city_name, sold_within_days, seen, market_slug):
     return city_rows
 
 
+def load_existing_sales(output_path):
+    """Load existing sales CSV and return (rows_by_mls, most_recent_date)."""
+    if not os.path.exists(output_path):
+        return {}, None
+
+    rows_by_mls = {}
+    most_recent_date = None
+
+    with open(output_path, "r", newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            mls = row.get("mls_number", "").strip()
+            if mls:
+                rows_by_mls[mls] = row
+
+            sold_date = row.get("sold_date", "")
+            if sold_date:
+                try:
+                    d = datetime.strptime(sold_date, "%B-%d-%Y").date()
+                    if most_recent_date is None or d > most_recent_date:
+                        most_recent_date = d
+                except ValueError:
+                    pass
+
+    return rows_by_mls, most_recent_date
+
+
 def main():
-    sold_within_days = DEFAULT_SOLD_WITHIN_DAYS
-    if len(sys.argv) > 1:
-        try:
-            sold_within_days = int(sys.argv[1])
-        except ValueError:
-            print(f"Usage: {sys.argv[0]} [sold_within_days]")
-            sys.exit(1)
+    parser = argparse.ArgumentParser(description="Ingest Redfin sold homes data")
+    parser.add_argument("sold_days", nargs="?", type=int, default=None,
+                        help="Days of sales to fetch (default: auto for incremental, 90 for full)")
+    parser.add_argument("--full", action="store_true",
+                        help="Force full refresh instead of incremental update")
+    args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
@@ -152,24 +183,70 @@ def main():
     metro_cities = [(c["region_id"], c["name"]) for c in config["cities"]]
     market_slug = config["metro"]["redfin_market_slug"]
 
-    print(f"Fetching sold homes from last {sold_within_days} days "
-          f"across {len(metro_cities)} metro cities...\n")
+    # Determine fetch window
+    existing_by_mls, most_recent_date = {}, None
+    if not args.full:
+        existing_by_mls, most_recent_date = load_existing_sales(output_path)
 
-    all_rows = []
+    if args.sold_days is not None:
+        sold_within_days = args.sold_days
+        mode = "full" if args.full else "manual"
+    elif args.full or not existing_by_mls:
+        sold_within_days = DEFAULT_SOLD_WITHIN_DAYS
+        mode = "full"
+    else:
+        # Incremental: fetch from 3 days before most recent sale (overlap for safety)
+        if most_recent_date:
+            days_since = (date.today() - most_recent_date).days + 3
+            sold_within_days = max(7, min(days_since, 30))  # clamp to 7-30 days
+        else:
+            sold_within_days = 14
+        mode = "incremental"
+
+    if mode == "incremental":
+        print(f"Incremental update: fetching last {sold_within_days} days, "
+              f"merging with {len(existing_by_mls):,} existing sales\n")
+    else:
+        print(f"Full refresh: fetching last {sold_within_days} days "
+              f"across {len(metro_cities)} metro cities...\n")
+
+    new_rows = []
     seen = set()  # deduplicate across cities
 
     for region_id, city_name in metro_cities:
         print(f"  {city_name}...", end=" ", flush=True)
         city_rows = fetch_city(region_id, city_name, sold_within_days, seen, market_slug)
         print(f"{len(city_rows)} sales")
-        all_rows.extend(city_rows)
+        new_rows.extend(city_rows)
         time.sleep(0.5)
 
-    print(f"\nTotal unique sold homes: {len(all_rows):,}")
+    print(f"\nFetched {len(new_rows):,} sales from API")
+
+    # Merge with existing data
+    if mode == "incremental" and existing_by_mls:
+        new_count = 0
+        for row in new_rows:
+            mls = row.get("mls_number", "").strip()
+            if mls and mls not in existing_by_mls:
+                new_count += 1
+            if mls:
+                existing_by_mls[mls] = row  # update/add
+        all_rows = list(existing_by_mls.values())
+        print(f"Merged: {new_count} new sales, {len(all_rows):,} total")
+    else:
+        all_rows = new_rows
 
     if not all_rows:
         print("No data collected. Exiting.")
         sys.exit(1)
+
+    # Sort by sold_date descending (most recent first)
+    def parse_date(row):
+        try:
+            return datetime.strptime(row.get("sold_date", ""), "%B-%d-%Y")
+        except ValueError:
+            return datetime.min
+    all_rows.sort(key=parse_date, reverse=True)
 
     fieldnames = list(COLUMN_MAP.values())
     with open(output_path, "w", newline="", encoding="utf-8") as f:
@@ -179,9 +256,14 @@ def main():
 
     meta_path = os.path.join(data_dir, "redfin_sold_meta.json")
     with open(meta_path, "w", encoding="utf-8") as f:
-        json.dump({"sold_within_days": sold_within_days}, f)
+        json.dump({
+            "sold_within_days": sold_within_days,
+            "mode": mode,
+            "total_records": len(all_rows),
+            "last_updated": datetime.now().isoformat(),
+        }, f, indent=2)
 
-    print(f"Saved to {output_path}")
+    print(f"Saved {len(all_rows):,} records to {output_path}")
     print("Done.")
 
 

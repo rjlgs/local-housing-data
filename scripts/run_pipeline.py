@@ -4,17 +4,22 @@ Single entry point for the housing data pipeline.
 
 Supports tiered updates so different data sources can refresh independently:
   - county_parcels:   County ArcGIS (~10 min, every ~2 weeks)
-  - market_trends:    Redfin S3 bulk data (~3 min, every ~2 weeks)
-  - sold_homes:       Redfin sold CSV (~1 min, daily)
+  - market_trends:    Redfin S3 bulk data (~3 min, every ~2 weeks, ETag-cached)
+  - sold_homes:       Redfin sold CSV (~1 min, daily, incremental merge)
   - active_listings:  Redfin active CSV (~1 min, twice daily)
 
+Incremental optimizations:
+  - sold_homes: Merges new sales with existing data (dedup by MLS#)
+  - market_trends: Skips download if S3 ETag unchanged
+
 Usage:
-    python3 scripts/run_pipeline.py                # run all tiers
+    python3 scripts/run_pipeline.py                # run all tiers (incremental)
     python3 scripts/run_pipeline.py --tier active   # just active listings
     python3 scripts/run_pipeline.py --tier sold     # just sold homes
     python3 scripts/run_pipeline.py --tier trends   # just market trends
     python3 scripts/run_pipeline.py --tier county   # just county parcels
     python3 scripts/run_pipeline.py --if-stale      # only run tiers that are due
+    python3 scripts/run_pipeline.py --full          # force full refresh (no incremental)
     python3 scripts/run_pipeline.py --skip-county   # all except county (legacy)
     python3 scripts/run_pipeline.py --sold-days 30  # override sold-homes window
 """
@@ -43,15 +48,15 @@ TIER_STEPS = {
         {
             "name": "Redfin Market Data",
             "script": "ingest_redfin_market.py",
-            "description": "City + zip-level market trends (Redfin S3)",
+            "description": "City + zip-level market trends (Redfin S3, ETag-cached)",
         },
     ],
     "sold_homes": [
         {
             "name": "Redfin Sold Homes",
             "script": "ingest_redfin_sold.py",
-            "description": "Individual sold-home transactions across metro cities (Redfin CSV)",
-            "extra_args_key": "sold_days",
+            "description": "Individual sold-home transactions (incremental merge)",
+            "args_builder": "sold_args",
         },
     ],
     "active_listings": [
@@ -93,6 +98,16 @@ TIER_ALIASES = {
 }
 
 
+def build_sold_args(args):
+    """Build arguments for ingest_redfin_sold.py."""
+    cmd_args = []
+    if args.sold_days is not None:
+        cmd_args.append(str(args.sold_days))
+    if args.full:
+        cmd_args.append("--full")
+    return cmd_args
+
+
 def run_step(step, args):
     """Run a single pipeline step. Returns True on success."""
     script = os.path.join(SCRIPT_DIR, step["script"])
@@ -103,11 +118,13 @@ def run_step(step, args):
 
     cmd = [sys.executable, script]
 
-    extra_key = step.get("extra_args_key")
-    if extra_key:
-        val = getattr(args, extra_key, None)
-        if val is not None:
-            cmd.append(str(val))
+    # Build script-specific arguments
+    args_builder = step.get("args_builder")
+    if args_builder == "sold_args":
+        cmd.extend(build_sold_args(args))
+    elif args.full:
+        # Pass --full to scripts that support it
+        cmd.append("--full")
 
     start = time.time()
     result = subprocess.run(cmd, cwd=os.path.dirname(SCRIPT_DIR))
@@ -169,6 +186,10 @@ def main():
     parser.add_argument(
         "--sold-days", type=int, default=None,
         help="Override sold-within-days for Redfin sold homes (default: 90)"
+    )
+    parser.add_argument(
+        "--full", action="store_true",
+        help="Force full refresh (skip incremental optimizations)"
     )
     args = parser.parse_args()
 
