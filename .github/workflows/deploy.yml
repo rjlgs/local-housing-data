@@ -39,11 +39,17 @@ jobs:
         with:
           python-version: '3.12'
 
+      # Cache pip dependencies
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('requirements.txt') }}
+
       # Restore cached data/ (pipeline state, intermediate CSVs, photo cache)
       - uses: actions/cache/restore@v4
         with:
           path: data
-          key: pipeline-data-${{ github.run_id }}
+          key: pipeline-data-${{ hashFiles('config.json') }}-${{ github.run_number }}
           restore-keys: pipeline-data-
 
       # Install CLIP dependencies (VQ enabled by default)
@@ -68,12 +74,16 @@ jobs:
             python3 scripts/run_pipeline.py --if-stale $VQ_FLAG
           fi
 
+      # Generate status page
+      - name: Generate status page
+        run: python3 scripts/generate_status_page.py
+
       # Save cache (always, so partial data persists across runs)
       - uses: actions/cache/save@v4
         if: always()
         with:
           path: data
-          key: pipeline-data-${{ github.run_id }}
+          key: pipeline-data-${{ hashFiles('config.json') }}-${{ github.run_number }}
 
       # Assemble site for GitHub Pages
       - name: Assemble site
@@ -83,6 +93,7 @@ jobs:
           cp config.json _site/
           cp -r dashboard/* _site/dashboard/
           cp data/dashboard_data.json _site/data/
+          cp data/status.html _site/
           [ -f data/zcta_boundaries.geojson ] && cp data/zcta_boundaries.geojson _site/data/ || true
 
       - uses: actions/upload-pages-artifact@v3
