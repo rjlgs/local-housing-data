@@ -9,8 +9,13 @@ This script reads:
 - combined_properties.csv (optional): Joined dataset with county data
 
 And produces: dashboard_data.json for the dashboard to consume.
+
+Usage:
+    python3 scripts/build_dashboard_data.py                 # normal run (uses cache)
+    python3 scripts/build_dashboard_data.py --force-photos  # re-fetch all photo URLs
 """
 
+import argparse
 import json
 import csv
 import os
@@ -459,12 +464,17 @@ def fetch_photo_url(redfin_url):
         return None
 
 
-def fetch_photo_urls(homes):
-    """Fetch all photo URLs for all homes with Redfin URLs."""
+def fetch_photo_urls(homes, force=False):
+    """Fetch all photo URLs for all homes with Redfin URLs.
+
+    Args:
+        homes: List of home dictionaries with redfin_url field
+        force: If True, ignore cache and re-fetch all photo URLs
+    """
     # Separate cache file (stores lists now, not single strings)
     cache_path = DATA_DIR / "photo_urls_cache.json"
     cache = {}
-    if cache_path.exists():
+    if cache_path.exists() and not force:
         with open(cache_path) as f:
             cache = json.load(f)
 
@@ -497,8 +507,18 @@ def fetch_photo_urls(homes):
 
 def main():
     """Main execution."""
+    parser = argparse.ArgumentParser(description="Build dashboard data from raw CSV files")
+    parser.add_argument(
+        "--force-photos",
+        action="store_true",
+        help="Re-fetch all photo URLs (ignore cache)",
+    )
+    args = parser.parse_args()
+
     print("=" * 60)
     print("Building dashboard data...")
+    if args.force_photos:
+        print("  (--force-photos: re-fetching all photo URLs)")
     print("=" * 60)
 
     # Load config
@@ -539,11 +559,11 @@ def main():
 
     # Fetch property photos from Redfin listing pages
     print("\nFetching property photos (sold)...")
-    homes = fetch_photo_urls(homes)
+    homes = fetch_photo_urls(homes, force=args.force_photos)
 
     if active_listings:
         print("\nFetching property photos (active)...")
-        active_listings = fetch_photo_urls(active_listings)
+        active_listings = fetch_photo_urls(active_listings, force=args.force_photos)
 
     # Read sold window metadata written by ingest_redfin_sold.py
     sold_meta_path = DATA_DIR / "redfin_sold_meta.json"
