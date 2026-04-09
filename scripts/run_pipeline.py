@@ -6,6 +6,7 @@ Supports tiered updates so different data sources can refresh independently:
   - market_trends:    Redfin S3 bulk data (~3 min, every ~2 weeks, ETag-cached)
   - sold_homes:       Redfin sold CSV (~1 min, daily, incremental merge)
   - active_listings:  Redfin active CSV (~1 min, twice daily)
+  - rental_listings:  Multi-provider rental feed (Redfin + Zillow + RentCast, twice daily)
 
 Incremental optimizations:
   - sold_homes: Merges new sales with existing data (dedup by MLS#)
@@ -16,6 +17,7 @@ Usage:
     python3 scripts/run_pipeline.py --tier active         # just active listings
     python3 scripts/run_pipeline.py --tier sold           # just sold homes
     python3 scripts/run_pipeline.py --tier trends         # just market trends
+    python3 scripts/run_pipeline.py --tier rentals        # just rental listings
     python3 scripts/run_pipeline.py --if-stale            # only run tiers that are due
     python3 scripts/run_pipeline.py --full                # force full refresh (no incremental)
     python3 scripts/run_pipeline.py --sold-days 30        # override sold-homes window
@@ -58,6 +60,13 @@ TIER_STEPS = {
             "description": "Currently active for-sale listings across metro cities",
         },
     ],
+    "rental_listings": [
+        {
+            "name": "Rental Listings",
+            "script": "fetch_rental_listings.py",
+            "description": "Active rentals from Redfin + Zillow + RentCast (deduped)",
+        },
+    ],
 }
 
 # Post-ingest steps that always run after any tier updates
@@ -78,9 +87,10 @@ VISUAL_QUALITY_STEP = {
 
 # Shorthand aliases for --tier
 TIER_ALIASES = {
-    "active": "active_listings",
-    "sold": "sold_homes",
-    "trends": "market_trends",
+    "active":  "active_listings",
+    "sold":    "sold_homes",
+    "trends":  "market_trends",
+    "rentals": "rental_listings",
 }
 
 
@@ -160,7 +170,7 @@ def main():
     )
     parser.add_argument(
         "--tier", type=str, default=None,
-        help="Run only a specific tier: active, sold, trends"
+        help="Run only a specific tier: active, sold, trends, rentals"
     )
     parser.add_argument(
         "--if-stale", action="store_true",

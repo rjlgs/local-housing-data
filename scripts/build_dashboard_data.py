@@ -35,6 +35,7 @@ INPUT_FILES = {
     "config": PROJECT_ROOT / "config.json",
     "sold": DATA_DIR / "redfin_sold.csv",
     "active": DATA_DIR / "redfin_active.csv",
+    "rentals": DATA_DIR / "rental_listings.csv",
     "market_city": DATA_DIR / "redfin_market_city.csv",
     "market_zip": DATA_DIR / "redfin_market_zip.csv",
     "active_tracker": DATA_DIR / "active_listings_tracker.json",
@@ -230,6 +231,65 @@ def parse_active_csv(path):
         print(f"  Error reading {path.name}: {e}")
 
     return listings
+
+
+def parse_rental_csv(path):
+    """Parse rental listings CSV file.
+
+    Produced by ``scripts/fetch_rental_listings.py`` which runs the
+    multi-provider rental pipeline (Redfin + Zillow + RentCast).
+    """
+    if not path.exists():
+        print(f"Info: {path} not found, skipping rental listings")
+        return []
+
+    print(f"Reading {path.name}...")
+    rentals = []
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # ``sources`` is a semicolon-joined list inside the CSV;
+                # split it into an array for the JSON output.
+                sources_raw = (row.get("sources") or "").strip()
+                sources = [s for s in sources_raw.split(";") if s] if sources_raw else []
+
+                rental = {
+                    "source": row.get("source", "").strip() or None,
+                    "sources": sources or ([row.get("source")] if row.get("source") else []),
+                    "listing_id": row.get("listing_id", "").strip() or None,
+                    "address": row.get("address", "").strip() or None,
+                    "city": row.get("city", "").strip() or None,
+                    "state": row.get("state", "").strip() or None,
+                    "zip_code": row.get("zip_code", "").strip() or None,
+                    "rent_monthly": safe_numeric(row.get("rent_monthly")),
+                    "deposit": safe_numeric(row.get("deposit")),
+                    "beds": safe_numeric(row.get("beds")),
+                    "baths": safe_numeric(row.get("baths")),
+                    "sqft": safe_numeric(row.get("sqft")),
+                    "year_built": safe_numeric(row.get("year_built")),
+                    "pets_allowed": row.get("pets_allowed", "").strip() or None,
+                    "furnished": row.get("furnished", "").strip() or None,
+                    "lease_term_months": safe_numeric(row.get("lease_term_months")),
+                    "available_date": row.get("available_date", "").strip() or None,
+                    "property_type": row.get("property_type", "").strip() or None,
+                    "latitude": safe_numeric(row.get("latitude")),
+                    "longitude": safe_numeric(row.get("longitude")),
+                    "listing_url": row.get("listing_url", "").strip() or None,
+                    "photo_url": row.get("photo_url", "").strip() or None,
+                    "photo_urls": [row["photo_url"].strip()] if row.get("photo_url", "").strip() else [],
+                    "first_seen": row.get("first_seen", "").strip() or None,
+                    "days_tracked": safe_numeric(row.get("days_tracked")),
+                    "rent_change": safe_numeric(row.get("rent_change")),
+                }
+                rentals.append(rental)
+
+        print(f"  Processed {len(rentals)} rental listings")
+    except Exception as e:
+        print(f"  Error reading {path.name}: {e}")
+
+    return rentals
 
 
 def point_in_polygon(lat, lng, polygon):
@@ -477,6 +537,10 @@ def main():
     print("\nParsing active listings...")
     active_listings = parse_active_csv(INPUT_FILES["active"])
 
+    # Parse rental listings (multi-provider)
+    print("\nParsing rental listings...")
+    rental_listings = parse_rental_csv(INPUT_FILES["rentals"])
+
     # Fetch property photos from Redfin listing pages
     print("\nFetching property photos (sold)...")
     homes = fetch_photo_urls(homes, force=args.force_photos)
@@ -539,6 +603,7 @@ def main():
         "zip_areas": zip_areas,
         "sold_homes": homes,
         "active_listings": active_listings,
+        "rental_listings": rental_listings,
         "area_summary": area_summary,
     }
 
@@ -556,6 +621,7 @@ def main():
     print(f"Generated at: {output['generated_at']}")
     print(f"Sold homes: {len(homes)}")
     print(f"Active listings: {len(active_listings)}")
+    print(f"Rental listings: {len(rental_listings)}")
     print(f"Market areas: {len(market_trends)}")
     print(f"Focus areas with summaries: {len(area_summary)}")
     print("=" * 60)

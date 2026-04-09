@@ -1117,6 +1117,7 @@ const Prefs = {
   getSyncable() {
     const data = { ...this._load() };
     delete data.activeTab;
+    delete data.favoritesCategory; // UI-only, per-device preference
     return data;
   },
 
@@ -1129,6 +1130,13 @@ const Prefs = {
 };
 
 // --- Favorites (localStorage + JSONBin persistence) ---
+//
+// Categories: entries can be tagged 'buy' or 'rent'. Entries are stored under
+// a compound key `${category}::${addr}` with a `category` field on the value.
+// Legacy entries written before categories existed are stored under the plain
+// address and have no `category` field — they stay visible in BOTH the buy
+// and rent segments until the user re-interacts with them from a categorized
+// context (which upgrades them via remove()).
 const FavoritesStore = {
   _storageKey: 'housing-favorites',
   _cache: null,
@@ -1154,59 +1162,105 @@ const FavoritesStore = {
     try { localStorage.setItem(this._storageKey, JSON.stringify(this._cache)); } catch {}
   },
 
-  getAll() { return this._load(); },
+  _compoundKey(addr, category) { return `${category}::${addr}`; },
 
-  isFavorited(addr) { return !!this._load()[addr]; },
+  _isLegacyKey(key) { return !key.includes('::'); },
 
-  add(listing) {
+  // Return the snapshotted "price" for a listing, category-aware.
+  _snapshotPrice(listing, category) {
+    if (category === 'rent') {
+      return listing.rent_monthly != null ? listing.rent_monthly : listing.list_price;
+    }
+    return listing.list_price;
+  },
+
+  // getAll() → raw store (used by SyncClient for full persistence).
+  // getAll('buy'|'rent') → filtered view including legacy un-categorized entries.
+  getAll(category) {
+    const favs = this._load();
+    if (!category) return favs;
+    const out = {};
+    for (const key of Object.keys(favs)) {
+      const entry = favs[key];
+      if (!entry) continue;
+      if (entry.category === category) {
+        out[key] = entry;
+      } else if (!entry.category && this._isLegacyKey(key)) {
+        // Legacy entry: visible under both categories.
+        out[key] = entry;
+      }
+    }
+    return out;
+  },
+
+  isFavorited(addr, category = 'buy') {
+    const favs = this._load();
+    if (favs[this._compoundKey(addr, category)]) return true;
+    const legacy = favs[addr];
+    if (legacy && !legacy.category) return true;
+    return false;
+  },
+
+  add(listing, category = 'buy') {
     const favs = this._load();
     const addr = listing.address;
     if (!addr) return;
-    favs[addr] = {
+    const key = this._compoundKey(addr, category);
+    favs[key] = {
       data: Object.assign({}, listing),
+      category,
       favorited_at: new Date().toISOString(),
-      last_active_price: listing.list_price,
+      last_active_price: this._snapshotPrice(listing, category),
       delisted: false,
       delisted_at: null,
     };
     this._save();
   },
 
-  remove(addr) {
+  remove(addr, category = 'buy') {
     const favs = this._load();
-    delete favs[addr];
+    delete favs[this._compoundKey(addr, category)];
+    // Also clear any legacy un-categorized entry at the same address — the
+    // user has now explicitly said this address should not be favorited in
+    // this category, and legacy entries are dual-visible so leaving one
+    // would be surprising.
+    if (favs[addr] && !favs[addr].category) {
+      delete favs[addr];
+    }
     this._save();
   },
 
-  toggle(listing) {
-    if (this.isFavorited(listing.address)) {
-      this.remove(listing.address);
+  toggle(listing, category = 'buy') {
+    if (this.isFavorited(listing.address, category)) {
+      this.remove(listing.address, category);
       return false;
     }
-    this.add(listing);
+    this.add(listing, category);
     return true;
   },
 
-  syncStatus(activeListings) {
+  // Sync status for a single category against a list of currently-active
+  // listings for THAT category. Legacy un-categorized entries are left
+  // untouched so they retain their dual-segment visibility.
+  syncStatus(categoryListings, category = 'buy') {
     const favs = this._load();
-    const activeAddrs = new Set((activeListings || []).map(h => h.address));
-    let changed = false;
-    for (const addr of Object.keys(favs)) {
-      const fav = favs[addr];
+    const activeAddrs = new Set((categoryListings || []).map(h => h.address));
+    for (const key of Object.keys(favs)) {
+      const fav = favs[key];
+      if (!fav || fav.category !== category) continue;
+      const addr = fav.data && fav.data.address;
+      if (!addr) continue;
       if (activeAddrs.has(addr)) {
-        // Still active — update snapshot with latest data
-        const current = activeListings.find(h => h.address === addr);
+        const current = categoryListings.find(h => h.address === addr);
         if (current) {
           fav.data = Object.assign({}, current);
-          fav.last_active_price = current.list_price;
+          fav.last_active_price = this._snapshotPrice(current, category);
         }
-        if (fav.delisted) { fav.delisted = false; fav.delisted_at = null; changed = true; }
+        if (fav.delisted) { fav.delisted = false; fav.delisted_at = null; }
       } else {
-        // Not in active listings — mark delisted
         if (!fav.delisted) {
           fav.delisted = true;
           fav.delisted_at = new Date().toISOString();
-          changed = true;
         }
       }
     }
@@ -1214,9 +1268,15 @@ const FavoritesStore = {
     return favs;
   },
 
-  count() { return Object.keys(this._load()).length; },
+  count(category) {
+    if (!category) return Object.keys(this._load()).length;
+    return Object.keys(this.getAll(category)).length;
+  },
 };
 
+// DownvoteStore follows the same category scheme as FavoritesStore.
+// Legacy entries (plain-address keys, no `category` field) apply to both
+// categories until re-interacted with.
 const DownvoteStore = {
   _storageKey: 'housing-downvotes',
   _cache: null,
@@ -1242,29 +1302,43 @@ const DownvoteStore = {
     try { localStorage.setItem(this._storageKey, JSON.stringify(this._cache)); } catch {}
   },
 
+  _compoundKey(addr, category) { return `${category}::${addr}`; },
+
   getAll() { return this._load(); },
 
-  isDownvoted(addr) { return !!this._load()[addr]; },
+  isDownvoted(addr, category = 'buy') {
+    const store = this._load();
+    if (store[this._compoundKey(addr, category)]) return true;
+    const legacy = store[addr];
+    if (legacy && !legacy.category) return true;
+    return false;
+  },
 
-  add(addr) {
+  add(addr, category = 'buy') {
     const store = this._load();
     if (!addr) return;
-    store[addr] = { downvoted_at: new Date().toISOString() };
+    store[this._compoundKey(addr, category)] = {
+      downvoted_at: new Date().toISOString(),
+      category,
+    };
     this._save();
   },
 
-  remove(addr) {
+  remove(addr, category = 'buy') {
     const store = this._load();
-    delete store[addr];
+    delete store[this._compoundKey(addr, category)];
+    if (store[addr] && !store[addr].category) {
+      delete store[addr];
+    }
     this._save();
   },
 
-  toggle(addr) {
-    if (this.isDownvoted(addr)) {
-      this.remove(addr);
+  toggle(addr, category = 'buy') {
+    if (this.isDownvoted(addr, category)) {
+      this.remove(addr, category);
       return false;
     }
-    this.add(addr);
+    this.add(addr, category);
     return true;
   },
 

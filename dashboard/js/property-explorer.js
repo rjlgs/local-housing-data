@@ -44,7 +44,7 @@ const PropertyExplorer = {
     container.innerHTML = `
       <div class="tab-header">
         <div class="tab-title-row">
-          <h2>Property Explorer</h2>
+          <h2>Sold</h2>
           <button id="pe-learn-more" class="btn-learn-more">Learn More</button>
           ${data.data_freshness && data.data_freshness.sold_homes ? `<span class="freshness-badge">Sold data updated ${MapUtils.formatAge(data.data_freshness.sold_homes)}</span>` : ''}
         </div>

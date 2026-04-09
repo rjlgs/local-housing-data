@@ -55,7 +55,7 @@ const Listings = {
     container.innerHTML = `
       <div class="tab-header">
         <div class="tab-title-row">
-          <h2>Listings</h2>
+          <h2>To Buy</h2>
           <button id="ls-learn-more" class="btn-learn-more">Learn More</button>
           <span class="freshness-badge" title="Last data refresh">Active listings updated ${lastUpdated}</span>
         </div>
@@ -341,9 +341,9 @@ const Listings = {
     // Listings-specific status filters
     if (f.status === 'new') listings = listings.filter(h => this._isNew(h));
     if (f.status === 'price-drop') listings = listings.filter(h => h.price_change && h.price_change < 0);
-    if (f.status === 'favorited') listings = listings.filter(h => FavoritesStore.isFavorited(h.address));
-    if (f.status === 'hide-downvoted') listings = listings.filter(h => !DownvoteStore.isDownvoted(h.address));
-    if (f.status === 'downvoted') listings = listings.filter(h => DownvoteStore.isDownvoted(h.address));
+    if (f.status === 'favorited') listings = listings.filter(h => FavoritesStore.isFavorited(h.address, 'buy'));
+    if (f.status === 'hide-downvoted') listings = listings.filter(h => !DownvoteStore.isDownvoted(h.address, 'buy'));
+    if (f.status === 'downvoted') listings = listings.filter(h => DownvoteStore.isDownvoted(h.address, 'buy'));
 
     this._filteredListings = listings;
     this._renderMarkers(listings);
@@ -368,8 +368,8 @@ const Listings = {
       <span>Median $/SqFt: <strong>${Utils.formatCurrency(Utils.median(listings.map(h => h.price_per_sqft).filter(v => v != null)))}</strong></span>
       ${newCount > 0 ? `<span class="badge badge-new" title="Listed within the last 3 days">${newCount} new</span>` : ''}
       ${dropCount > 0 ? `<span class="badge badge-drop" title="Asking price has been reduced since first listed">${dropCount} price drops</span>` : ''}
-      ${(() => { const fc = listings.filter(h => FavoritesStore.isFavorited(h.address)).length; return fc > 0 ? `<span class="badge badge-fav" title="Listings you've marked as favorites">${fc} favorited</span>` : ''; })()}
-      ${(() => { const dc = listings.filter(h => DownvoteStore.isDownvoted(h.address)).length; return dc > 0 ? `<span class="badge badge-downvote" title="Listings you've ruled out">${dc} ruled out</span>` : ''; })()}
+      ${(() => { const fc = listings.filter(h => FavoritesStore.isFavorited(h.address, 'buy')).length; return fc > 0 ? `<span class="badge badge-fav" title="Listings you've marked as favorites">${fc} favorited</span>` : ''; })()}
+      ${(() => { const dc = listings.filter(h => DownvoteStore.isDownvoted(h.address, 'buy')).length; return dc > 0 ? `<span class="badge badge-downvote" title="Listings you've ruled out">${dc} ruled out</span>` : ''; })()}
     `;
 
     MapUtils.sortData(listings, this._sort.col, this._sort.asc);
@@ -387,8 +387,8 @@ const Listings = {
         const cls = h.price_change < 0 ? 'delta-down' : 'delta-up';
         priceChangeHtml = `<span class="${cls}">${sign}${Utils.formatCurrency(h.price_change)}</span>`;
       }
-      const isFav = FavoritesStore.isFavorited(h.address);
-      const isDown = DownvoteStore.isDownvoted(h.address);
+      const isFav = FavoritesStore.isFavorited(h.address, 'buy');
+      const isDown = DownvoteStore.isDownvoted(h.address, 'buy');
       return `
         <tr class="clickable-row${isDown ? ' downvoted-row' : ''}" data-addr="${(h.address || '').replace(/"/g, '&quot;')}">
           <td><button class="btn-fav${isFav ? ' active' : ''}" data-fav-addr="${(h.address || '').replace(/"/g, '&quot;')}" title="${isFav ? 'Remove from favorites' : 'Add to favorites'}">${isFav ? '&#9733;' : '&#9734;'}</button><button class="btn-downvote${isDown ? ' active' : ''}" data-down-addr="${(h.address || '').replace(/"/g, '&quot;')}" title="${isDown ? 'Remove rule-out' : 'Rule out this listing'}">${isDown ? '&#8634;' : '&#10005;'}</button></td>
@@ -426,13 +426,13 @@ const Listings = {
         const addr = btn.dataset.favAddr;
         const listing = this._allListings.find(h => h.address === addr);
         if (!listing) return;
-        const nowFav = FavoritesStore.toggle(listing);
+        const nowFav = FavoritesStore.toggle(listing, 'buy');
         btn.classList.toggle('active', nowFav);
         btn.innerHTML = nowFav ? '&#9733;' : '&#9734;';
         btn.title = nowFav ? 'Remove from favorites' : 'Add to favorites';
         // Mutual exclusion: favoriting removes downvote
-        if (nowFav && DownvoteStore.isDownvoted(addr)) {
-          DownvoteStore.remove(addr);
+        if (nowFav && DownvoteStore.isDownvoted(addr, 'buy')) {
+          DownvoteStore.remove(addr, 'buy');
           const downBtn = btn.parentElement.querySelector('.btn-downvote');
           if (downBtn) downBtn.classList.remove('active');
           btn.closest('tr').classList.remove('downvoted-row');
@@ -446,14 +446,14 @@ const Listings = {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const addr = btn.dataset.downAddr;
-        const nowDown = DownvoteStore.toggle(addr);
+        const nowDown = DownvoteStore.toggle(addr, 'buy');
         btn.classList.toggle('active', nowDown);
         btn.title = nowDown ? 'Remove rule-out' : 'Rule out this listing';
         const row = btn.closest('tr');
         row.classList.toggle('downvoted-row', nowDown);
         // Mutual exclusion: downvoting removes favorite
-        if (nowDown && FavoritesStore.isFavorited(addr)) {
-          FavoritesStore.remove(addr);
+        if (nowDown && FavoritesStore.isFavorited(addr, 'buy')) {
+          FavoritesStore.remove(addr, 'buy');
           const favBtn = row.querySelector('.btn-fav');
           if (favBtn) {
             favBtn.classList.remove('active');
