@@ -37,8 +37,6 @@ INPUT_FILES = {
     "active": DATA_DIR / "redfin_active.csv",
     "market_city": DATA_DIR / "redfin_market_city.csv",
     "market_zip": DATA_DIR / "redfin_market_zip.csv",
-    "combined": DATA_DIR / "combined_properties.csv",
-    "combined_active": DATA_DIR / "combined_active.csv",
     "active_tracker": DATA_DIR / "active_listings_tracker.json",
 }
 
@@ -174,11 +172,6 @@ def parse_sold_csv(path):
                     "longitude": safe_numeric(row.get("longitude")),
                     "redfin_url": row.get("redfin_url", "").strip() or None,
                     "photo_urls": [],
-                    # County data placeholders
-                    "total_assessed": None,
-                    "building_value": None,
-                    "land_value": None,
-                    "grade": None,
                 }
 
                 homes.append(home)
@@ -188,38 +181,6 @@ def parse_sold_csv(path):
         print(f"  Error reading {path.name}: {e}")
 
     return homes
-
-
-def parse_combined_csv(path):
-    """Parse combined properties CSV to enrich sold homes with county data."""
-    if not path.exists():
-        print(f"Info: {path} not found, county data will not be enriched")
-        return {}
-
-    print(f"Reading {path.name}...")
-    county_data = {}
-
-    try:
-        with open(path, encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                # Use address as key for matching
-                address = row.get("address", "").strip()
-                if not address:
-                    continue
-
-                county_data[address] = {
-                    "total_assessed": safe_numeric(row.get("total_assessed")),
-                    "building_value": safe_numeric(row.get("building_value")),
-                    "land_value": safe_numeric(row.get("land_value")),
-                    "grade": row.get("grade", "").strip() or None,
-                }
-
-        print(f"  Processed {len(county_data)} county records")
-    except Exception as e:
-        print(f"  Error reading {path.name}: {e}")
-
-    return county_data
 
 
 def parse_active_csv(path):
@@ -261,11 +222,6 @@ def parse_active_csv(path):
                     "original_price": safe_numeric(row.get("original_price")),
                     "price_change": safe_numeric(row.get("price_change")),
                     "price_drop_count": safe_numeric(row.get("price_drop_count")),
-                    # County data placeholders
-                    "total_assessed": None,
-                    "building_value": None,
-                    "land_value": None,
-                    "grade": None,
                 }
                 listings.append(listing)
 
@@ -274,31 +230,6 @@ def parse_active_csv(path):
         print(f"  Error reading {path.name}: {e}")
 
     return listings
-
-
-def enrich_active_listings(listings, county_data):
-    """Enrich active listings with county data."""
-    enriched_count = 0
-    for listing in listings:
-        address = listing["address"]
-        if address in county_data:
-            listing.update(county_data[address])
-            enriched_count += 1
-    print(f"  Enriched {enriched_count} active listings with county data")
-    return listings
-
-
-def enrich_sold_homes(homes, county_data):
-    """Enrich sold homes with county data."""
-    enriched_count = 0
-    for home in homes:
-        address = home["address"]
-        if address in county_data:
-            home.update(county_data[address])
-            enriched_count += 1
-
-    print(f"  Enriched {enriched_count} homes with county data")
-    return homes
 
 
 def point_in_polygon(lat, lng, polygon):
@@ -542,20 +473,9 @@ def main():
     market_data = {**market_city, **market_zip}
     print(f"  Total market areas: {len(market_data)}")
 
-    # Parse and enrich with county data (optional)
-    print("\nParsing county data...")
-    county_data = parse_combined_csv(INPUT_FILES["combined"])
-    homes = enrich_sold_homes(homes, county_data)
-
     # Parse active listings
     print("\nParsing active listings...")
     active_listings = parse_active_csv(INPUT_FILES["active"])
-
-    # Parse county data for active listings enrichment
-    print("\nParsing county data for active listings...")
-    active_county = parse_combined_csv(INPUT_FILES["combined_active"])
-    if active_listings:
-        active_listings = enrich_active_listings(active_listings, active_county)
 
     # Fetch property photos from Redfin listing pages
     print("\nFetching property photos (sold)...")

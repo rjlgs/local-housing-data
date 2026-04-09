@@ -5,7 +5,7 @@
 const AreaCompare = {
   _scatterCharts: [
     { id: 'chart-price-sqft', label: 'Price vs. Square Footage', note: 'Each dot is a recent sale. Where do you get the most space for your money?' },
-    { id: 'chart-assessed-vs-sale', label: 'Assessed Value vs. Sale Price', note: 'Dots below the diagonal sold for less than assessed value.' },
+    { id: 'chart-price-year', label: 'Price vs. Year Built', note: 'See how sale prices vary by construction year across areas.' },
   ],
 
   init(container, data) {
@@ -44,13 +44,12 @@ const AreaCompare = {
           <h4>Summary table</h4>
           <p>The table at the top shows median price, price per square foot, square footage, lot size, beds, days on market, year built, and price range for each area. These are computed during the data build step from all sold homes matching each area's boundary.</p>
           <h4>Scatter plots</h4>
-          <p><strong>Price vs. Square Footage</strong> shows where you get the most space for your money across areas. <strong>Assessed Value vs. Sale Price</strong> reveals whether homes are selling above or below their county-assessed value — dots below the diagonal sold for less than assessed.</p>
+          <p><strong>Price vs. Square Footage</strong> shows where you get the most space for your money across areas. <strong>Price vs. Year Built</strong> shows how sale prices vary by construction year — useful for spotting premium pricing on newer builds or value in older homes.</p>
           <h4>Area filtering</h4>
           <p>For city-type areas (Summerfield, Oak Ridge), homes are matched by city name. For neighborhood-type areas (Irving Park, Sunset Hills), homes are matched using <strong>polygon boundaries</strong> — only homes with coordinates inside the defined boundary are included.</p>
           <h4>Data sources</h4>
           <ul>
             <li><strong>Sale data:</strong> Redfin sold listings API (last ~90 days)</li>
-            <li><strong>Assessed values:</strong> County ArcGIS parcel data</li>
           </ul>
         </div>
       </div>
@@ -96,7 +95,7 @@ const AreaCompare = {
     globalSelect.addEventListener('change', () => {
       Prefs.set('ac.globalTrend', globalSelect.value);
       this._renderScatter(homes, focusAreas);
-      this._renderAssessedVsSale(homes, focusAreas);
+      this._renderPriceVsYear(homes, focusAreas);
     });
 
     // Per-chart trend selects
@@ -106,14 +105,14 @@ const AreaCompare = {
       sel.addEventListener('change', () => {
         Prefs.set(`ac.chartTrends.${chartId}`, sel.value);
         if (chartId === 'chart-price-sqft') this._renderScatter(homes, focusAreas);
-        else this._renderAssessedVsSale(homes, focusAreas);
+        else this._renderPriceVsYear(homes, focusAreas);
       });
     });
 
     this._renderTable(summary, focusAreas);
     this._renderBarCharts(summary, focusAreas);
     this._renderScatter(homes, focusAreas);
-    this._renderAssessedVsSale(homes, focusAreas);
+    this._renderPriceVsYear(homes, focusAreas);
   },
 
   _formatAge(isoString) {
@@ -240,20 +239,20 @@ const AreaCompare = {
     }, { responsive: true, displayModeBar: false });
   },
 
-  _renderAssessedVsSale(homes, focusAreas) {
+  _renderPriceVsYear(homes, focusAreas) {
     const globalTrend = Prefs.get('ac.globalTrend', 'off');
     const chartTrend = Utils.resolveTrend(
       globalTrend,
-      Prefs.get('ac.chartTrends.chart-assessed-vs-sale', 'global')
+      Prefs.get('ac.chartTrends.chart-price-year', 'global')
     );
     const traces = [];
 
     focusAreas.forEach((fa, i) => {
       const filtered = Utils.filterByArea(homes, fa)
-        .filter(h => h.total_assessed && h.sale_price);
+        .filter(h => h.year_built && h.sale_price);
       if (filtered.length === 0) return;
 
-      const xVals = filtered.map(h => h.total_assessed);
+      const xVals = filtered.map(h => h.year_built);
       const yVals = filtered.map(h => h.sale_price);
 
       const effectiveTrend = chartTrend.startsWith('ma') ? 'linear' : chartTrend;
@@ -262,7 +261,7 @@ const AreaCompare = {
         x: xVals,
         y: yVals,
         text: filtered.map(h =>
-          `${h.address}<br>Assessed: ${Utils.formatCurrency(h.total_assessed)}<br>Sold: ${Utils.formatCurrency(h.sale_price)}`
+          `${h.address}<br>Built: ${h.year_built}<br>Sold: ${Utils.formatCurrency(h.sale_price)}`
         ),
         name: fa.name,
         type: 'scatter',
@@ -274,24 +273,9 @@ const AreaCompare = {
         .forEach(t => traces.push(t));
     });
 
-    // Diagonal reference line — scope to plotted data only
-    const plottedVals = traces
-      .filter(t => t.showlegend !== false)
-      .flatMap(t => [...(t.x || []), ...(t.y || [])]);
-    const maxVal = plottedVals.length > 0 ? Math.max(...plottedVals) : 1000000;
-
-    traces.push({
-      x: [0, maxVal],
-      y: [0, maxVal],
-      mode: 'lines',
-      line: { color: '#9ca3af', dash: 'dot', width: 1 },
-      showlegend: false,
-      hoverinfo: 'skip',
-    });
-
-    Plotly.newPlot('chart-assessed-vs-sale', traces, {
+    Plotly.newPlot('chart-price-year', traces, {
       ...Utils.plotlyDefaults,
-      xaxis: { gridcolor: '#e5e7eb', type: 'linear', title: 'Assessed Value', tickprefix: '$' },
+      xaxis: { gridcolor: '#e5e7eb', type: 'linear', title: 'Year Built' },
       yaxis: { gridcolor: '#e5e7eb', type: 'linear', title: 'Sale Price', tickprefix: '$' },
     }, { responsive: true, displayModeBar: false });
   },

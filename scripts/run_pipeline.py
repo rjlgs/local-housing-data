@@ -3,7 +3,6 @@
 Single entry point for the housing data pipeline.
 
 Supports tiered updates so different data sources can refresh independently:
-  - county_parcels:   County ArcGIS (~10 min, every ~2 weeks)
   - market_trends:    Redfin S3 bulk data (~3 min, every ~2 weeks, ETag-cached)
   - sold_homes:       Redfin sold CSV (~1 min, daily, incremental merge)
   - active_listings:  Redfin active CSV (~1 min, twice daily)
@@ -17,10 +16,8 @@ Usage:
     python3 scripts/run_pipeline.py --tier active   # just active listings
     python3 scripts/run_pipeline.py --tier sold     # just sold homes
     python3 scripts/run_pipeline.py --tier trends   # just market trends
-    python3 scripts/run_pipeline.py --tier county   # just county parcels
     python3 scripts/run_pipeline.py --if-stale      # only run tiers that are due
     python3 scripts/run_pipeline.py --full          # force full refresh (no incremental)
-    python3 scripts/run_pipeline.py --skip-county   # all except county (legacy)
     python3 scripts/run_pipeline.py --sold-days 30  # override sold-homes window
 """
 
@@ -37,44 +34,32 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Tier name -> pipeline steps (in order)
 TIER_STEPS = {
-    "county_parcels": [
-        {
-            "name": "County Parcels",
-            "script": "ingest_county_parcels.py",
-            "description": "County property characteristics via ArcGIS",
-        },
-    ],
     "market_trends": [
         {
-            "name": "Redfin Market Data",
-            "script": "ingest_redfin_market.py",
+            "name": "Market Trends",
+            "script": "fetch_market_trends.py",
             "description": "City + zip-level market trends (Redfin S3, ETag-cached)",
         },
     ],
     "sold_homes": [
         {
-            "name": "Redfin Sold Homes",
-            "script": "ingest_redfin_sold.py",
+            "name": "Sold Listings",
+            "script": "fetch_sold_listings.py",
             "description": "Individual sold-home transactions (incremental merge)",
             "args_builder": "sold_args",
         },
     ],
     "active_listings": [
         {
-            "name": "Redfin Active Listings",
-            "script": "ingest_redfin_active.py",
-            "description": "Currently active for-sale listings across metro cities (Redfin CSV)",
+            "name": "Active Listings",
+            "script": "fetch_active_listings.py",
+            "description": "Currently active for-sale listings across metro cities",
         },
     ],
 }
 
 # Post-ingest steps that always run after any tier updates
 POST_STEPS = [
-    {
-        "name": "Combine Data",
-        "script": "combine_data.py",
-        "description": "Join county parcels with Redfin data on address",
-    },
     {
         "name": "Build Dashboard Data",
         "script": "build_dashboard_data.py",
@@ -94,7 +79,6 @@ TIER_ALIASES = {
     "active": "active_listings",
     "sold": "sold_homes",
     "trends": "market_trends",
-    "county": "county_parcels",
 }
 
 
@@ -156,11 +140,8 @@ def resolve_tiers(args):
             sys.exit(1)
         return [tier]
 
-    # Default: all tiers (respecting --skip-county)
-    tiers = list(TIER_STEPS.keys())
-    if args.skip_county:
-        tiers = [t for t in tiers if t != "county_parcels"]
-    return tiers
+    # Default: all tiers
+    return list(TIER_STEPS.keys())
 
 
 def main():
@@ -169,15 +150,11 @@ def main():
     )
     parser.add_argument(
         "--tier", type=str, default=None,
-        help="Run only a specific tier: active, sold, trends, county"
+        help="Run only a specific tier: active, sold, trends"
     )
     parser.add_argument(
         "--if-stale", action="store_true",
         help="Only run tiers whose data is older than their cadence"
-    )
-    parser.add_argument(
-        "--skip-county", action="store_true",
-        help="Skip the county parcels pull (legacy flag)"
     )
     parser.add_argument(
         "--skip-visual-quality", action="store_true",

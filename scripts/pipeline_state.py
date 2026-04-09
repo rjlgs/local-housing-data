@@ -13,7 +13,6 @@ STATE_FILE = Path(__file__).parent.parent / "data" / "pipeline_state.json"
 
 # Default cadences (hours)
 DEFAULT_CADENCES = {
-    "county_parcels":   336,   # ~2 weeks
     "market_trends":    336,   # ~2 weeks
     "sold_homes":       24,    # daily
     "active_listings":  12,    # twice daily

@@ -76,7 +76,6 @@ const Listings = {
           <h4>Data sources</h4>
           <ul>
             <li><strong>Listing data:</strong> Redfin active listings API</li>
-            <li><strong>Assessed values:</strong> County ArcGIS parcel data</li>
             <li><strong>Sold comps:</strong> Redfin sold listings (last ~90 days)</li>
           </ul>
         </div>
@@ -503,8 +502,6 @@ const Listings = {
     const scoreMap = new Map(scoredComps.map(s => [s.home.address, s.score]));
 
     const medianComp = Utils.median(comps.map(h => h.sale_price));
-    const assessedDiff = listing.total_assessed && listing.list_price
-      ? ((listing.list_price - listing.total_assessed) / listing.total_assessed * 100).toFixed(1) : null;
     const compDiff = medianComp && listing.list_price
       ? ((listing.list_price - medianComp) / medianComp * 100).toFixed(1) : null;
 
@@ -527,11 +524,6 @@ const Listings = {
           </div>
         </div>
         <div class="comp-metrics">
-          <div class="metric">
-            <span class="metric-label">vs. Assessed Value</span>
-            <span class="metric-value">${listing.total_assessed ? Utils.formatCurrency(listing.total_assessed) : '\u2014'}</span>
-            ${assessedDiff ? `<span class="metric-delta ${Number(assessedDiff) > 0 ? 'delta-up' : 'delta-down'}">${assessedDiff > 0 ? '+' : ''}${assessedDiff}%</span>` : ''}
-          </div>
           <div class="metric">
             <span class="metric-label">vs. Median Sold Comp</span>
             <span class="metric-value">${medianComp ? Utils.formatCurrency(medianComp) : '\u2014'}</span>

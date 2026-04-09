@@ -211,57 +211,5 @@
   "jsonbin": {
     "master_bin_id": "69d31b2e36566621a881aeec",
     "api_key": "$2a$10$2/h92ee8VLn/rQhIBLjx2.arh.9h3WJjx4ibthe.ufko1oqdj57tq"
-  },
-  "county_parcels": {
-    "enabled": true,
-    "source_name": "Guilford County",
-    "base_url": "https://gcgis.guilfordcountync.gov/arcgis/rest/services/Tax/PublishingParcelsSpatialView_FeatureToPointWGS84/FeatureServer/0/query",
-    "out_fields": [
-      "REID",
-      "PIN",
-      "LOCATION_ADDR",
-      "Owner",
-      "Property_Type",
-      "Total_Assessed",
-      "Total_Building_Value",
-      "Total_Land_Value",
-      "Total_Out_Building_Value",
-      "TOTAL_DEFERRED_VALUE",
-      "Structure_Size",
-      "Lot_Size",
-      "YEAR_BUILT",
-      "BEDROOMS",
-      "Bathrooms",
-      "GRADE",
-      "Neighborhood",
-      "DEED_DATE",
-      "BLDG_CARD",
-      "CentroidXCoordinate",
-      "CentroidYCoordinat"
-    ],
-    "field_map": {
-      "REID": "reid",
-      "PIN": "pin",
-      "LOCATION_ADDR": "address",
-      "Owner": "owner",
-      "Property_Type": "property_type",
-      "Total_Assessed": "total_assessed",
-      "Total_Building_Value": "building_value",
-      "Total_Land_Value": "land_value",
-      "Total_Out_Building_Value": "outbuilding_value",
-      "TOTAL_DEFERRED_VALUE": "deferred_value",
-      "Structure_Size": "structure_sqft",
-      "Lot_Size": "lot_acres",
-      "YEAR_BUILT": "year_built",
-      "BEDROOMS": "bedrooms",
-      "Bathrooms": "bathrooms",
-      "GRADE": "grade",
-      "Neighborhood": "neighborhood",
-      "DEED_DATE": "deed_date",
-      "BLDG_CARD": "building_card_url",
-      "CentroidXCoordinate": "longitude",
-      "CentroidYCoordinat": "latitude"
-    },
-    "page_size": 2000
   }
 }

@@ -27,7 +27,6 @@ const PropertyExplorer = {
     { col: 'city', label: 'City' },
     { col: 'neighborhood', label: 'Neighborhood' },
     { col: 'sale_price', label: 'Price' },
-    { col: null, label: '\u0394 Assessed', sortable: false },
     { col: 'hoa_monthly', label: 'HOA/mo' },
     { col: 'price_per_sqft', label: '$/SqFt' },
     { col: 'sqft', label: 'SqFt' },
@@ -61,11 +60,10 @@ const PropertyExplorer = {
           <h4>Custom polygon drawing</h4>
           <p>Select <strong>"Custom (Draw on Map)"</strong> from the Area dropdown to draw your own polygon or rectangle on the map. All homes inside your shape will be filtered and analyzed with summary statistics.</p>
           <h4>Comparable sales</h4>
-          <p>Click any row to see comparable sales — homes in the same zip code with similar bed count (&plusmn;1) and square footage (&plusmn;25%). The comp analysis shows how the sale price compares to the county's assessed value and to the median of comparable recent sales.</p>
+          <p>Click any row to see comparable sales — homes in the same zip code with similar bed count (&plusmn;1) and square footage (&plusmn;25%). The comp analysis shows how the sale price compares to the median of comparable recent sales.</p>
           <h4>Data sources</h4>
           <ul>
             <li><strong>Sale data:</strong> Redfin sold listings API (last ~90 days)</li>
-            <li><strong>Assessed values &amp; property details:</strong> County ArcGIS parcel data, joined by address</li>
           </ul>
         </div>
       </div>
@@ -317,13 +315,6 @@ const PropertyExplorer = {
         <td>${h.city || '—'}</td>
         <td>${h.neighborhood || '—'}</td>
         <td>${Utils.formatCurrency(h.sale_price)}</td>
-        <td>${(() => {
-          if (h.sale_price == null || !h.total_assessed) return '—';
-          const diff = h.sale_price - h.total_assessed;
-          const pct = (diff / h.total_assessed * 100).toFixed(1);
-          const sign = diff >= 0 ? '+' : '';
-          return `${sign}${Utils.formatCurrency(diff)} (${sign}${pct}%)`;
-        })()}</td>
         <td>${h.hoa_monthly != null ? Utils.formatCurrency(h.hoa_monthly) : '—'}</td>
         <td>${Utils.formatCurrency(h.price_per_sqft)}</td>
         <td>${Utils.formatNumber(h.sqft)}</td>
@@ -356,8 +347,6 @@ const PropertyExplorer = {
     const scoreMap = new Map(scoredComps.map(s => [s.home.address, s.score]));
 
     const medianComp = Utils.median(comps.map(h => h.sale_price));
-    const assessedDiff = home.total_assessed && home.sale_price
-      ? ((home.sale_price - home.total_assessed) / home.total_assessed * 100).toFixed(1) : null;
     const compDiff = medianComp && home.sale_price
       ? ((home.sale_price - medianComp) / medianComp * 100).toFixed(1) : null;
 
@@ -373,11 +362,6 @@ const PropertyExplorer = {
           </div>
         </div>
         <div class="comp-metrics">
-          <div class="metric">
-            <span class="metric-label">vs. Assessed Value</span>
-            <span class="metric-value">${home.total_assessed ? Utils.formatCurrency(home.total_assessed) : '—'}</span>
-            ${assessedDiff ? `<span class="metric-delta ${Number(assessedDiff) > 0 ? 'delta-up' : 'delta-down'}">${assessedDiff > 0 ? '+' : ''}${assessedDiff}%</span>` : ''}
-          </div>
           <div class="metric">
             <span class="metric-label">vs. Median Comp</span>
             <span class="metric-value">${medianComp ? Utils.formatCurrency(medianComp) : '—'}</span>

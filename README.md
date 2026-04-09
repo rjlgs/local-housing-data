@@ -15,44 +15,28 @@ A data pipeline for collecting, analyzing, and visualizing housing market data f
                                         │
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           TIER 1: DATA INGEST                                    │
+│                           TIER 1: DATA FETCH                                     │
 │  run_pipeline.py --if-stale                                                      │
-├──────────────────┬──────────────────┬───────────────────┬───────────────────────┤
-│  active_listings │   sold_homes     │   market_trends   │   county_parcels      │
-│  (12h cadence)   │   (24h cadence)  │   (336h cadence)  │   (336h cadence)      │
-│        │         │        │         │         │         │         │             │
-│        ▼         │        ▼         │         ▼         │         ▼             │
-│  Redfin API      │  Redfin API      │   Redfin S3       │  Guilford ArcGIS      │
-│  gis-csv         │  gis-csv         │   TSV bulk        │  REST API             │
-│        │         │        │         │         │         │         │             │
-│        ▼         │        ▼         │         ▼         │         ▼             │
-│  redfin_         │  redfin_         │  redfin_market_   │  county_              │
-│  active.csv      │  sold.csv        │  city/zip.csv     │  parcels.csv          │
-│                  │                  │                   │                       │
-│  ┌────────────┐  │                  │                   │                       │
-│  │ redfin_url │◄─┼── Captured here, │                   │                       │
-│  │ (per home) │  │   NOT photos yet │                   │                       │
-│  └────────────┘  │                  │                   │                       │
-└──────────────────┴──────────────────┴───────────────────┴───────────────────────┘
+├────────────────────────┬────────────────────────┬───────────────────────────────┤
+│    active_listings     │      sold_homes        │       market_trends           │
+│    (12h cadence)       │      (24h cadence)     │       (336h cadence)          │
+│          │             │            │           │             │                 │
+│          ▼             │            ▼           │             ▼                 │
+│  fetch_active_         │  fetch_sold_           │   fetch_market_               │
+│  listings.py           │  listings.py           │   trends.py                   │
+│          │             │            │           │             │                 │
+│          ▼             │            ▼           │             ▼                 │
+│  redfin_active.csv     │  redfin_sold.csv       │  redfin_market_city.csv       │
+│                        │                        │  redfin_market_zip.csv        │
+│  ┌────────────┐        │                        │                               │
+│  │ redfin_url │◄───────┼── Captured here,       │                               │
+│  │ (per home) │        │   NOT photos yet       │                               │
+│  └────────────┘        │                        │                               │
+└────────────────────────┴────────────────────────┴───────────────────────────────┘
                                         │
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                        TIER 2: COMBINE & ENRICH                                  │
-│  combine_data.py                                                                 │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│   redfin_sold.csv ──────┬──── JOIN on ────┬──── county_parcels.csv              │
-│   redfin_active.csv ────┘    address      └──────────────────────               │
-│                                │                                                 │
-│                                ▼                                                 │
-│                    combined_properties.csv                                       │
-│                    combined_active.csv                                           │
-│                                                                                  │
-└─────────────────────────────────────────────────────────────────────────────────┘
-                                        │
-                                        ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                      TIER 3: BUILD DASHBOARD DATA                                │
+│                      TIER 2: BUILD DASHBOARD DATA                                │
 │  build_dashboard_data.py [--force-photos]                                        │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                  │
@@ -74,10 +58,6 @@ A data pipeline for collecting, analyzing, and visualizing housing market data f
 │   │    Parse HTML for CDN URLs              │                                │   │
 │   │    ssl.cdn-redfin.com/photo/*           │                                │   │
 │   │               │                         │                                │   │
-│   │               ▼                         │                                │   │
-│   │    Prefer bigphoto/islphoto             │                                │   │
-│   │    (full-size over thumbs)              │                                │   │
-│   │               │                         │                                │   │
 │   │               ▼                         ▼                                │   │
 │   │           Save to cache ──────────► Return photo_urls[]                  │   │
 │   │                                                                          │   │
@@ -94,7 +74,7 @@ A data pipeline for collecting, analyzing, and visualizing housing market data f
                                         │
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    TIER 4: VISUAL QUALITY ASSESSMENT (Optional)                  │
+│                    TIER 3: VISUAL QUALITY ASSESSMENT (Optional)                  │
 │  assess_visual_quality.py [--force] [--limit N]                                  │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                  │
@@ -113,10 +93,6 @@ A data pipeline for collecting, analyzing, and visualizing housing market data f
 │   │                          ▼                         │                     │   │
 │   │               Select 3-5 photos                    │                     │   │
 │   │               (hero + sampled)                     │                     │   │
-│   │                          │                         │                     │   │
-│   │                          ▼                         │                     │   │
-│   │               Download images                      │                     │   │
-│   │               from CDN URLs                        │                     │   │
 │   │                          │                         │                     │   │
 │   │                          ▼                         │                     │   │
 │   │               ┌──────────────────┐                 │                     │   │
@@ -148,7 +124,7 @@ A data pipeline for collecting, analyzing, and visualizing housing market data f
                                         │
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                          TIER 5: DEPLOY TO GITHUB PAGES                          │
+│                          TIER 4: DEPLOY TO GITHUB PAGES                          │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                  │
 │    dashboard_data.json ─────► _site/ ─────► GitHub Pages                        │
@@ -218,7 +194,6 @@ bash start.sh
 
 | Source | Cadence | Script |
 |--------|---------|--------|
-| Redfin Active Listings | 12h | `ingest_redfin_active.py` |
-| Redfin Sold Homes | 24h | `ingest_redfin_sold.py` |
-| Redfin Market Trends | 2 weeks | `ingest_redfin_market.py` |
-| Guilford County Parcels | 2 weeks | `ingest_county_parcels.py` |
+| Redfin Active Listings | 12h | `fetch_active_listings.py` |
+| Redfin Sold Homes | 24h | `fetch_sold_listings.py` |
+| Redfin Market Trends | 2 weeks | `fetch_market_trends.py` |
