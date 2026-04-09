@@ -190,10 +190,11 @@ const PropertyExplorer = {
     if (saved.type) document.getElementById('filter-type').value = saved.type;
 
     // Bind events
-    document.getElementById('filter-apply').addEventListener('click', () => this._applyFilters(focusAreas));
-    document.getElementById('filter-clear').addEventListener('click', () => this._clearFilters(focusAreas));
+    const collapseDisclosure = () => { if (this._filterDisclosure) this._filterDisclosure.collapse(); };
+    document.getElementById('filter-apply').addEventListener('click', () => { this._applyFilters(focusAreas); collapseDisclosure(); });
+    document.getElementById('filter-clear').addEventListener('click', () => { this._clearFilters(focusAreas); collapseDisclosure(); });
     container.querySelectorAll('input').forEach(el => {
-      el.addEventListener('keydown', e => { if (e.key === 'Enter') this._applyFilters(focusAreas); });
+      el.addEventListener('keydown', e => { if (e.key === 'Enter') { this._applyFilters(focusAreas); collapseDisclosure(); } });
     });
 
     this._initMap();
@@ -207,6 +208,10 @@ const PropertyExplorer = {
       disableDraw: () => { this._disableDraw(); this._customPolygon = null; },
     });
     this._updateAreaTrigger();
+    this._filterDisclosure = MapUtils.initFilterDisclosure({
+      filterBarEl: container.querySelector('.filter-bar'),
+      selectedAreas: this._selectedAreas,
+    });
     this._applyFilters(focusAreas);
   },
 
@@ -290,6 +295,7 @@ const PropertyExplorer = {
       MapUtils.showAreaPolygons(this._map, this._areaPolygonsLayer, namedAreas, focusAreas, homes);
     }
     this._renderResults(homes);
+    if (this._filterDisclosure) this._filterDisclosure.refreshCount();
   },
 
   _renderResults(homes) {

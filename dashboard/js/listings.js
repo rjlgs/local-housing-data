@@ -229,10 +229,11 @@ const Listings = {
     if (saved.aestheticMax) document.getElementById('ls-filter-aesthetic-max').value = saved.aestheticMax;
 
     // Bind events
-    document.getElementById('ls-filter-apply').addEventListener('click', () => this._applyFilters(focusAreas));
-    document.getElementById('ls-filter-clear').addEventListener('click', () => this._clearFilters(focusAreas));
+    const collapseDisclosure = () => { if (this._filterDisclosure) this._filterDisclosure.collapse(); };
+    document.getElementById('ls-filter-apply').addEventListener('click', () => { this._applyFilters(focusAreas); collapseDisclosure(); });
+    document.getElementById('ls-filter-clear').addEventListener('click', () => { this._clearFilters(focusAreas); collapseDisclosure(); });
     container.querySelectorAll('input').forEach(el => {
-      el.addEventListener('keydown', e => { if (e.key === 'Enter') this._applyFilters(focusAreas); });
+      el.addEventListener('keydown', e => { if (e.key === 'Enter') { this._applyFilters(focusAreas); collapseDisclosure(); } });
     });
 
     this._initMap();
@@ -246,6 +247,10 @@ const Listings = {
       disableDraw: () => { this._disableDraw(); this._customPolygon = null; },
     });
     this._updateAreaTrigger();
+    this._filterDisclosure = MapUtils.initFilterDisclosure({
+      filterBarEl: container.querySelector('.filter-bar'),
+      selectedAreas: this._selectedAreas,
+    });
     this._applyFilters(focusAreas);
   },
 
@@ -353,6 +358,7 @@ const Listings = {
       MapUtils.showAreaPolygons(this._map, this._areaPolygonsLayer, namedAreas, focusAreas, listings);
     }
     this._renderResults(listings);
+    if (this._filterDisclosure) this._filterDisclosure.refreshCount();
   },
 
   _renderResults(listings) {
