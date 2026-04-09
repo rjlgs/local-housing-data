@@ -16,6 +16,16 @@ on:
         required: false
         default: false
         type: boolean
+      force_photos:
+        description: 'Force re-fetch all photo URLs from Redfin'
+        required: false
+        default: false
+        type: boolean
+      force_visual_quality:
+        description: 'Force re-score all properties (ignore VQ cache)'
+        required: false
+        default: false
+        type: boolean
   push:
     branches: [main]
     paths: ['dashboard/**', 'scripts/**', 'config.json', '.github/workflows/**']
@@ -59,19 +69,25 @@ jobs:
       # Run the data pipeline
       - name: Run pipeline
         run: |
-          VQ_FLAG=""
+          FLAGS=""
           if [ "${{ inputs.skip_visual_quality }}" = "true" ]; then
-            VQ_FLAG="--skip-visual-quality"
+            FLAGS="$FLAGS --skip-visual-quality"
+          fi
+          if [ "${{ inputs.force_photos }}" = "true" ]; then
+            FLAGS="$FLAGS --force-photos"
+          fi
+          if [ "${{ inputs.force_visual_quality }}" = "true" ]; then
+            FLAGS="$FLAGS --force-visual-quality"
           fi
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tier }}" ]; then
             if [ "${{ inputs.tier }}" = "all" ]; then
-              python3 scripts/run_pipeline.py $VQ_FLAG
+              python3 scripts/run_pipeline.py $FLAGS
             else
-              python3 scripts/run_pipeline.py --tier "${{ inputs.tier }}" $VQ_FLAG
+              python3 scripts/run_pipeline.py --tier "${{ inputs.tier }}" $FLAGS
             fi
           else
-            python3 scripts/run_pipeline.py --if-stale $VQ_FLAG
+            python3 scripts/run_pipeline.py --if-stale $FLAGS
           fi
 
       # Generate status page

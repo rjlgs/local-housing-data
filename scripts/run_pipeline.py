@@ -12,13 +12,15 @@ Incremental optimizations:
   - market_trends: Skips download if S3 ETag unchanged
 
 Usage:
-    python3 scripts/run_pipeline.py                # run all tiers (incremental)
-    python3 scripts/run_pipeline.py --tier active   # just active listings
-    python3 scripts/run_pipeline.py --tier sold     # just sold homes
-    python3 scripts/run_pipeline.py --tier trends   # just market trends
-    python3 scripts/run_pipeline.py --if-stale      # only run tiers that are due
-    python3 scripts/run_pipeline.py --full          # force full refresh (no incremental)
-    python3 scripts/run_pipeline.py --sold-days 30  # override sold-homes window
+    python3 scripts/run_pipeline.py                      # run all tiers (incremental)
+    python3 scripts/run_pipeline.py --tier active         # just active listings
+    python3 scripts/run_pipeline.py --tier sold           # just sold homes
+    python3 scripts/run_pipeline.py --tier trends         # just market trends
+    python3 scripts/run_pipeline.py --if-stale            # only run tiers that are due
+    python3 scripts/run_pipeline.py --full                # force full refresh (no incremental)
+    python3 scripts/run_pipeline.py --sold-days 30        # override sold-homes window
+    python3 scripts/run_pipeline.py --force-photos        # re-fetch all photo URLs
+    python3 scripts/run_pipeline.py --force-visual-quality # re-score all properties
 """
 
 import argparse
@@ -110,6 +112,14 @@ def run_step(step, args):
         # Pass --full to scripts that support it
         cmd.append("--full")
 
+    # Pass --force-photos to build_dashboard_data.py
+    if step["script"] == "build_dashboard_data.py" and args.force_photos:
+        cmd.append("--force-photos")
+
+    # Pass --force to assess_visual_quality.py if force_visual_quality is set
+    if step["script"] == "assess_visual_quality.py" and args.force_visual_quality:
+        cmd.append("--force")
+
     start = time.time()
     result = subprocess.run(cmd, cwd=os.path.dirname(SCRIPT_DIR))
     elapsed = time.time() - start
@@ -159,6 +169,14 @@ def main():
     parser.add_argument(
         "--skip-visual-quality", action="store_true",
         help="Skip visual quality assessment (requires CLIP dependencies)"
+    )
+    parser.add_argument(
+        "--force-photos", action="store_true",
+        help="Re-fetch all photo URLs from Redfin (ignore cache)"
+    )
+    parser.add_argument(
+        "--force-visual-quality", action="store_true",
+        help="Re-score all properties with visual quality assessment (ignore cache)"
     )
     parser.add_argument(
         "--sold-days", type=int, default=None,
