@@ -56,7 +56,7 @@ const Listings = {
       <div class="tab-header">
         <div class="tab-title-row">
           <h2>Listings</h2>
-          <button id="ls-learn-more" class="btn-learn-more">Learn More</button>
+          <button id="ls-learn-more" class="btn-learn-more" aria-label="Learn more about listings" title="Learn more">&#9432;</button>
           <span class="freshness-badge" title="Last data refresh">Active listings updated ${lastUpdated}</span>
         </div>
         <p class="subtitle">Browse active for-sale listings. Homes with recent price drops or new to market are flagged.</p>

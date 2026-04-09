@@ -31,7 +31,7 @@ const AreaCompare = {
       <div class="tab-header">
         <div class="tab-title-row">
           <h2>Area Compare</h2>
-          <button id="ac-learn-more" class="btn-learn-more">Learn More</button>
+          <button id="ac-learn-more" class="btn-learn-more" aria-label="Learn more about area compare" title="Learn more">&#9432;</button>
           ${data.data_freshness && data.data_freshness.sold_homes ? `<span class="freshness-badge">Sold data updated ${this._formatAge(data.data_freshness.sold_homes)}</span>` : ''}
         </div>
         <p class="subtitle">Compare your focus areas side by side on price, size, and value.</p>

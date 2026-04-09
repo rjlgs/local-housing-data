@@ -1129,14 +1129,19 @@ body {
 .tab-title-row { display: flex; align-items: center; gap: 0.75rem; }
 
 .btn-learn-more {
-  padding: 0.25rem 0.6rem;
+  width: 1.65rem;
+  height: 1.65rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 50%;
   background: var(--surface);
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: 1rem;
+  line-height: 1;
   cursor: pointer;
-  white-space: nowrap;
 }
 
 .btn-learn-more:hover { color: var(--primary); border-color: var(--primary); }
@@ -1884,6 +1889,10 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .btn-learn-more {
+    min-width: 44px;
   }
 
   .multiselect-trigger {

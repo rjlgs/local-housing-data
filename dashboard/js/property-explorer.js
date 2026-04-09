@@ -45,7 +45,7 @@ const PropertyExplorer = {
       <div class="tab-header">
         <div class="tab-title-row">
           <h2>Property Explorer</h2>
-          <button id="pe-learn-more" class="btn-learn-more">Learn More</button>
+          <button id="pe-learn-more" class="btn-learn-more" aria-label="Learn more about property explorer" title="Learn more">&#9432;</button>
           ${data.data_freshness && data.data_freshness.sold_homes ? `<span class="freshness-badge">Sold data updated ${MapUtils.formatAge(data.data_freshness.sold_homes)}</span>` : ''}
         </div>
         <p class="subtitle">Search recent sales. Filter by area, size, and price. Draw a polygon on the map to define a custom area.</p>
