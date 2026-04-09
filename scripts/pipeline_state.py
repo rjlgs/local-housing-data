@@ -16,6 +16,7 @@ DEFAULT_CADENCES = {
     "market_trends":    336,   # ~2 weeks
     "sold_homes":       24,    # daily
     "active_listings":  12,    # twice daily
+    "rental_listings":  12,    # twice daily (multi-provider rental feed)
 }
 
 

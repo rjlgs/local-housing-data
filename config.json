@@ -208,6 +208,11 @@
     { "region_id": "34317", "name": "Ruffin" },
     { "region_id": "6368", "name": "Franklinville" }
   ],
+  "rental_sources": {
+    "redfin":   { "enabled": true },
+    "zillow":   { "enabled": true },
+    "rentcast": { "enabled": false, "api_key": "" }
+  },
   "jsonbin": {
     "master_bin_id": "69d31b2e36566621a881aeec",
     "api_key": "$2a$10$2/h92ee8VLn/rQhIBLjx2.arh.9h3WJjx4ibthe.ufko1oqdj57tq"
