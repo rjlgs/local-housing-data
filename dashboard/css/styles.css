@@ -1129,22 +1129,19 @@ body {
 .tab-title-row { display: flex; align-items: center; gap: 0.75rem; }
 
 .btn-learn-more {
-  width: 1.65rem;
-  height: 1.65rem;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  background: var(--surface);
+  border: none;
+  background: none;
   color: var(--text-muted);
-  font-size: 1rem;
+  font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
 }
 
-.btn-learn-more:hover { color: var(--primary); border-color: var(--primary); }
+.btn-learn-more:hover { color: var(--primary); }
 
 .modal-overlay {
   position: fixed;
@@ -1893,6 +1890,7 @@ body {
 
   .btn-learn-more {
     min-width: 44px;
+    font-size: 1.35rem;
   }
 
   .multiselect-trigger {
