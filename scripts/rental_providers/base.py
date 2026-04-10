@@ -11,7 +11,7 @@ import re
 # Canonical field order for the rental CSV. Keep this in sync with
 # ``parse_rental_csv`` in build_dashboard_data.py.
 CANONICAL_FIELDS = [
-    "source",             # primary provider name (one of: redfin, zillow, rentcast)
+    "source",             # primary provider name (one of: redfin, zillow, apartments)
     "sources",            # ;-joined list of provider names that surfaced this listing
     "listing_id",         # provider-specific identifier
     "address",

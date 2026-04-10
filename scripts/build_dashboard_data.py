@@ -237,7 +237,7 @@ def parse_rental_csv(path):
     """Parse rental listings CSV file.
 
     Produced by ``scripts/fetch_rental_listings.py`` which runs the
-    multi-provider rental pipeline (Redfin + Zillow + RentCast).
+    multi-provider rental pipeline (Redfin + Zillow + Apartments.com).
     """
     if not path.exists():
         print(f"Info: {path} not found, skipping rental listings")

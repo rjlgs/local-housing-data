@@ -209,9 +209,9 @@
     { "region_id": "6368", "name": "Franklinville" }
   ],
   "rental_sources": {
-    "redfin":   { "enabled": true },
-    "zillow":   { "enabled": true },
-    "rentcast": { "enabled": false, "api_key": "" }
+    "redfin":     { "enabled": true },
+    "zillow":     { "enabled": true },
+    "apartments": { "enabled": true }
   },
   "jsonbin": {
     "master_bin_id": "69d31b2e36566621a881aeec",

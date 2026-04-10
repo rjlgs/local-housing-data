@@ -6,7 +6,7 @@ Supports tiered updates so different data sources can refresh independently:
   - market_trends:    Redfin S3 bulk data (~3 min, every ~2 weeks, ETag-cached)
   - sold_homes:       Redfin sold CSV (~1 min, daily, incremental merge)
   - active_listings:  Redfin active CSV (~1 min, twice daily)
-  - rental_listings:  Multi-provider rental feed (Redfin + Zillow + RentCast, twice daily)
+  - rental_listings:  Multi-provider rental feed (Redfin + Zillow + Apartments.com, twice daily)
 
 Incremental optimizations:
   - sold_homes: Merges new sales with existing data (dedup by MLS#)
@@ -64,7 +64,7 @@ TIER_STEPS = {
         {
             "name": "Rental Listings",
             "script": "fetch_rental_listings.py",
-            "description": "Active rentals from Redfin + Zillow + RentCast (deduped)",
+            "description": "Active rentals from Redfin + Zillow + Apartments.com (deduped)",
         },
     ],
 }

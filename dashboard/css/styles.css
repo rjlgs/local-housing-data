@@ -2063,9 +2063,9 @@ body {
   background: #64748b;
   cursor: help;
 }
-.source-badge.source-redfin   { background: #c81d25; }
-.source-badge.source-zillow   { background: #006aff; }
-.source-badge.source-rentcast { background: #0f766e; }
+.source-badge.source-redfin     { background: #c81d25; }
+.source-badge.source-zillow     { background: #006aff; }
+.source-badge.source-apartments { background: #8b5cf6; }
 
 /* --- Source filter checkbox cluster (To Rent filter bar) --- */
 .source-filter-group {
