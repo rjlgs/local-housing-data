@@ -14,12 +14,12 @@ To add a new provider:
   3. Add a ``rental_sources.my_provider`` block to ``config.json``.
 """
 
-from . import base, redfin, rentcast, zillow
+from . import apartments, base, redfin, zillow
 
 PROVIDERS = {
-    "redfin":   redfin,
-    "zillow":   zillow,
-    "rentcast": rentcast,
+    "redfin":     redfin,
+    "zillow":     zillow,
+    "apartments": apartments,
 }
 
 

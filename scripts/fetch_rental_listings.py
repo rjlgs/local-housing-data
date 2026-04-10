@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Ingest rental listings from multiple providers (Redfin, Zillow, RentCast).
+Ingest rental listings from multiple providers (Redfin, Zillow, Apartments.com).
 
 This is the rental-tier entry point for ``run_pipeline.py``.  It:
 

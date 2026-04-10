@@ -212,7 +212,7 @@ const Favorites = {
   },
 
   _sourceBadge(rental) {
-    const SRC = { redfin: 'RF', zillow: 'ZL', rentcast: 'RC' };
+    const SRC = { redfin: 'RF', zillow: 'ZL', apartments: 'AP' };
     const primary = rental.source || '';
     const code = SRC[primary] || (primary ? primary.slice(0, 2).toUpperCase() : '?');
     return `<span class="source-badge source-${primary}">${code}</span>`;

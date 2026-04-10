@@ -17,18 +17,40 @@ rather than iterating per-city, because Zillow's region IDs don't line
 up with Redfin's.
 """
 
+import http.cookiejar
 import json
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
+# Current Chrome on Windows — matches the most common browser fingerprint.
 USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/122.0.0.0 Safari/537.36"
+    "Chrome/126.0.0.0 Safari/537.36"
 )
 
 ENDPOINT = "https://www.zillow.com/async-create-search-page-state/"
+
+# Page to visit first to obtain session cookies before the API call.
+_COOKIE_PRIME_URL = "https://www.zillow.com/homes/for_rent/"
+
+# Common headers that mimic a real Chrome browser session.
+_BROWSER_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Referer": "https://www.zillow.com/homes/for_rent/",
+    "Origin": "https://www.zillow.com",
+    "Sec-Fetch-Site": "same-origin",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-CH-UA": '"Chromium";v="126", "Google Chrome";v="126", "Not-A.Brand";v="8"',
+    "Sec-CH-UA-Mobile": "?0",
+    "Sec-CH-UA-Platform": '"Windows"',
+}
 
 
 def _build_search_state(map_center):
@@ -124,6 +146,39 @@ def _home_to_canonical(home):
     }
 
 
+def _prime_cookies():
+    """Visit the Zillow rental page to obtain session cookies.
+
+    Returns an opener with a cookie jar attached, or None on failure.
+    """
+    jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    req = urllib.request.Request(_COOKIE_PRIME_URL, headers=_BROWSER_HEADERS)
+    try:
+        with opener.open(req, timeout=15):
+            pass  # we only need the Set-Cookie headers
+    except Exception:
+        pass  # cookie priming is best-effort
+    return opener
+
+
+def _do_fetch(opener, url):
+    """Make the API request using the given opener (with cookies).
+
+    Returns decoded response text or None on failure.
+    """
+    req = urllib.request.Request(url, headers=_BROWSER_HEADERS)
+    try:
+        with opener.open(req, timeout=30) as resp:
+            return resp.read().decode("utf-8", errors="ignore")
+    except urllib.error.HTTPError as exc:
+        print(f"    [zillow] HTTP {exc.code} — Zillow likely rate-limited us")
+        return None
+    except Exception as exc:
+        print(f"    [zillow] request failed: {exc}")
+        return None
+
+
 def fetch(cities, config):
     """Fetch Zillow rentals for the metro's bounding box.
 
@@ -146,24 +201,18 @@ def fetch(cities, config):
         "requestId": 1,
     }
     url = f"{ENDPOINT}?{urllib.parse.urlencode(params)}"
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": USER_AGENT,
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://www.zillow.com/homes/for_rent/",
-        },
-    )
 
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            text = resp.read().decode("utf-8", errors="ignore")
-    except urllib.error.HTTPError as exc:
-        print(f"    [zillow] HTTP {exc.code} — Zillow likely rate-limited us; skipping")
-        return []
-    except Exception as exc:
-        print(f"    [zillow] request failed: {exc}")
+    # Step 1: prime cookies by visiting the rental search page.
+    opener = _prime_cookies()
+
+    # Step 2: hit the API (with one retry on failure).
+    text = _do_fetch(opener, url)
+    if text is None:
+        print("    [zillow] retrying after 3s...")
+        time.sleep(3)
+        text = _do_fetch(opener, url)
+    if text is None:
+        print("    [zillow] giving up; skipping")
         return []
 
     try:

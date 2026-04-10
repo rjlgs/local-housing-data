@@ -64,14 +64,14 @@ Data sources refresh at different rates, tracked in `data/pipeline_state.json`:
 - **Script:** `fetch_active_listings.py`
 
 ### 4. Rental Listings (Multi-Provider)
-Unlike the other tiers, rental data is stitched together from **three** providers via a plugin system under `scripts/rental_providers/`.  Each provider is enabled/disabled via `config.json → rental_sources.<name>.enabled`.  Providers return canonical rental records (see `rental_providers/base.py`), which the orchestrator dedupes by normalized-address + zip + beds.  Every row carries `source` (winning provider) and `sources` (all providers that surfaced the listing) for UI disambiguation.
+Unlike the other tiers, rental data is stitched together from **multiple** providers via a plugin system under `scripts/rental_providers/`.  Each provider is enabled/disabled via `config.json → rental_sources.<name>.enabled`.  Providers return canonical rental records (see `rental_providers/base.py`), which the orchestrator dedupes by normalized-address + zip + beds.  Every row carries `source` (winning provider) and `sources` (all providers that surfaced the listing) for UI disambiguation.
 
 - **Orchestrator:** `fetch_rental_listings.py` → writes `data/rental_listings.csv` + `data/rental_listings_tracker.json`
 - **Update cadence:** Twice daily (12h), matches active listings
 - **Providers never raise** — one broken source logs and returns `[]` so the tier still ships what the other providers returned.
 
 #### 4a. Redfin Rentals
-- **Endpoint:** `https://www.redfin.com/stingray/api/gis?status=9` (undocumented, scraped)
+- **Endpoint:** `https://www.redfin.com/stingray/api/gis?status=1&isRentals=true` (undocumented, scraped)
 - **Access:** Public, no key required (same User-Agent spoof as sold/active scripts).
 - **Geographic scope:** Same 29 cities as sold/active (iterated by `region_id`)
 - **Reliability:** High — shares infrastructure with existing sold/active pipeline.
@@ -86,14 +86,14 @@ Unlike the other tiers, rental data is stitched together from **three** provider
 - **Disable via:** `config.json → rental_sources.zillow.enabled = false`
 - **Module:** `rental_providers/zillow.py`
 
-#### 4c. RentCast API
-- **Endpoint:** `https://api.rentcast.io/v1/listings/rental/long-term`
-- **Access:** Requires API key.  Free tier = 50 requests/month.
-- **Key configuration:** `config.json → rental_sources.rentcast.api_key` **or** `RENTCAST_API_KEY` env var.
-- **Reliability:** High (official API), but bounded by the free-tier quota.
-- **Unique value:** Returns clean `depositAmount`, `furnished`, `petsAllowed`, `leaseLength`, `availableDate` fields that Redfin/Zillow don't expose reliably.
-- **Default:** **disabled** (`enabled: false`) — user must opt in by supplying a key.
-- **Module:** `rental_providers/rentcast.py`
+#### 4c. Apartments.com Rentals
+- **Endpoint:** `https://www.apartments.com/{city}-{state}/` (server-rendered search pages)
+- **Access:** Public, no key required. Uses Cloudflare/Akamai WAF, so may be blocked from cloud IPs.
+- **Geographic scope:** Same 29 cities as sold/active (iterated by city name).
+- **Reliability:** MEDIUM — Cloudflare may block GitHub Actions IPs. Provider logs and returns `[]` on failure.
+- **Data extraction:** Tries JSON-LD structured data first, falls back to HTML parsing of listing cards.
+- **Disable via:** `config.json → rental_sources.apartments.enabled = false`
+- **Module:** `rental_providers/apartments.py`
 
 #### Dedupe logic
 When the same unit appears in multiple providers, rows are merged via `rental_providers/base.dedupe_rows()`:

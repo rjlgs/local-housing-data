@@ -22,10 +22,11 @@ BASE_URL = "https://www.redfin.com/stingray/api/gis"
 
 USER_AGENT = "Mozilla/5.0 (compatible; housing-data-pipeline/1.0)"
 
-# Redfin's rental status flag (observed on rental search URLs).
+# Redfin status flags: 1 = active, 9 = sold, 130 = pending.
+# For rentals we use status=1 (active) combined with isRentals=true.
 # If this stops returning rows, inspect a rental search in DevTools and
 # update accordingly.
-RENTAL_STATUS = "9"
+RENTAL_STATUS = "1"
 RENTAL_UIPT = "1,2,3,4,5,6,7,8"  # include all residential types
 
 
@@ -37,6 +38,7 @@ def _fetch_city(region_id):
     """
     params = {
         "al": "1",
+        "isRentals": "true",
         "market": "greensboro",  # overridden by caller via config if needed
         "num_homes": "350",
         "ord": "redfin-recommended-asc",

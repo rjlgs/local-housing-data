@@ -1,7 +1,7 @@
 /**
  * To Rent tab — browse active rental listings.
  * Parallels the "To Buy" (Listings) tab but consumes rental data aggregated
- * from multiple providers (Redfin + Zillow + RentCast) and drops features
+ * from multiple providers (Redfin + Zillow + Apartments.com) and drops features
  * that only make sense for purchase (sold comps, HOA, price delta).
  */
 
@@ -25,9 +25,9 @@ const ToRent = {
 
   // Source codes → display labels used on badges + the source filter.
   SOURCE_LABELS: {
-    redfin:   { code: 'RF', label: 'Redfin' },
-    zillow:   { code: 'ZL', label: 'Zillow' },
-    rentcast: { code: 'RC', label: 'RentCast' },
+    redfin:     { code: 'RF', label: 'Redfin' },
+    zillow:     { code: 'ZL', label: 'Zillow' },
+    apartments: { code: 'AP', label: 'Apartments.com' },
   },
 
   _headers: [
@@ -77,7 +77,7 @@ const ToRent = {
           <button id="tr-learn-more" class="btn-learn-more">Learn More</button>
           <span class="freshness-badge" title="Last data refresh">Rental listings updated ${lastUpdated}</span>
         </div>
-        <p class="subtitle">Browse active rental listings aggregated from Redfin, Zillow, and RentCast. Duplicates across providers are merged automatically.</p>
+        <p class="subtitle">Browse active rental listings aggregated from Redfin, Zillow, and Apartments.com. Duplicates across providers are merged automatically.</p>
       </div>
       <div id="tr-modal" class="modal-overlay" style="display:none">
         <div class="modal-content">
@@ -87,7 +87,7 @@ const ToRent = {
           <ul>
             <li><strong>Redfin</strong> (<code>RF</code>) — scraped from Redfin's public rental search. Covers the same 29 metro cities as our for-sale data.</li>
             <li><strong>Zillow</strong> (<code>ZL</code>) — scraped from Zillow's rental search. Zillow aggressively rate-limits scrapers, so this source may occasionally be empty.</li>
-            <li><strong>RentCast</strong> (<code>RC</code>) — official API (opt-in via API key). Returns cleaner deposit, pets, furnished, and lease-term data.</li>
+            <li><strong>Apartments.com</strong> (<code>AP</code>) — scraped from Apartments.com city search pages. Largest US rental listing database.</li>
           </ul>
           <h4>Dedupe</h4>
           <p>When the same unit appears on multiple providers, rows are merged by normalized address + zip + bedroom count. The <strong>Src</strong> column shows the primary provider; hover it to see every provider that surfaced the listing.</p>
