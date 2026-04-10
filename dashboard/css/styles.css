@@ -844,6 +844,9 @@ body {
   padding: 0.625rem 0.75rem;
 }
 
+/* Mobile-only disclosure toggle — hidden on desktop */
+.filter-disclosure-toggle { display: none; }
+
 .filter-cluster {
   display: flex;
   flex-direction: column;
@@ -1126,17 +1129,19 @@ body {
 .tab-title-row { display: flex; align-items: center; gap: 0.75rem; }
 
 .btn-learn-more {
-  padding: 0.25rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--surface);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: 1.1rem;
+  line-height: 1;
   cursor: pointer;
-  white-space: nowrap;
 }
 
-.btn-learn-more:hover { color: var(--primary); border-color: var(--primary); }
+.btn-learn-more:hover { color: var(--primary); }
 
 .modal-overlay {
   position: fixed;
@@ -1677,10 +1682,56 @@ body {
     font-size: 2rem;
   }
 
-  /* Filter bar — fully stacked */
+  /* Filter bar — fully stacked behind disclosure toggle */
   .filter-bar {
     flex-direction: column;
     align-items: stretch;
+    padding: 0.5rem;
+  }
+
+  .filter-disclosure-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+    min-height: 44px;
+  }
+
+  .filter-disclosure-label { flex: 1; text-align: left; }
+
+  .filter-disclosure-count {
+    background: var(--primary);
+    color: white;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+  }
+
+  .filter-disclosure-chevron {
+    font-size: 0.75rem;
+    transition: transform 0.15s ease;
+    display: inline-block;
+  }
+
+  .filter-bar:not(.filter-bar--collapsed) .filter-disclosure-chevron {
+    transform: rotate(180deg);
+  }
+
+  .filter-bar--collapsed > .filter-cluster {
+    display: none;
+  }
+
+  .filter-bar:not(.filter-bar--collapsed) {
+    gap: 0.5rem;
   }
 
   .filter-cluster {
@@ -1835,6 +1886,11 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .btn-learn-more {
+    min-width: 44px;
+    font-size: 1.35rem;
   }
 
   .multiselect-trigger {

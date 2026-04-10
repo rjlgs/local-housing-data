@@ -71,7 +71,7 @@ const Listings = {
       <div class="tab-header">
         <div class="tab-title-row">
           <h2>Listings</h2>
-          <button id="ls-learn-more" class="btn-learn-more">Learn More</button>
+          <button id="ls-learn-more" class="btn-learn-more" aria-label="Learn more about listings" title="Learn more">&#9432;</button>
           <span class="freshness-badge" title="Last data refresh">Active listings updated ${lastUpdated}</span>
         </div>
         <p class="subtitle">Browse active for-sale listings. Homes with recent price drops or new to market are flagged.</p>
@@ -261,10 +261,11 @@ const Listings = {
     }
 
     // Bind events
-    document.getElementById('ls-filter-apply').addEventListener('click', () => this._applyFilters(focusAreas));
-    document.getElementById('ls-filter-clear').addEventListener('click', () => this._clearFilters(focusAreas));
+    const collapseDisclosure = () => { if (this._filterDisclosure) this._filterDisclosure.collapse(); };
+    document.getElementById('ls-filter-apply').addEventListener('click', () => { this._applyFilters(focusAreas); collapseDisclosure(); });
+    document.getElementById('ls-filter-clear').addEventListener('click', () => { this._clearFilters(focusAreas); collapseDisclosure(); });
     container.querySelectorAll('input').forEach(el => {
-      el.addEventListener('keydown', e => { if (e.key === 'Enter') this._applyFilters(focusAreas); });
+      el.addEventListener('keydown', e => { if (e.key === 'Enter') { this._applyFilters(focusAreas); collapseDisclosure(); } });
     });
 
     this._initMap();
@@ -295,6 +296,10 @@ const Listings = {
     });
     this._updateStatusTrigger();
 
+    this._filterDisclosure = MapUtils.initFilterDisclosure({
+      filterBarEl: container.querySelector('.filter-bar'),
+      selectedAreas: this._selectedAreas,
+    });
     this._applyFilters(focusAreas);
   },
 
@@ -424,6 +429,7 @@ const Listings = {
       MapUtils.showAreaPolygons(this._map, this._areaPolygonsLayer, namedAreas, focusAreas, listings);
     }
     this._renderResults(listings);
+    if (this._filterDisclosure) this._filterDisclosure.refreshCount();
   },
 
   _renderResults(listings) {

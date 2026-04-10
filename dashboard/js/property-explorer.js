@@ -51,7 +51,7 @@ const PropertyExplorer = {
       <div class="tab-header">
         <div class="tab-title-row">
           <h2>Property Explorer</h2>
-          <button id="pe-learn-more" class="btn-learn-more">Learn More</button>
+          <button id="pe-learn-more" class="btn-learn-more" aria-label="Learn more about property explorer" title="Learn more">&#9432;</button>
           ${data.data_freshness && data.data_freshness.sold_homes ? `<span class="freshness-badge">Sold data updated ${MapUtils.formatAge(data.data_freshness.sold_homes)}</span>` : ''}
         </div>
         <p class="subtitle">Search recent sales. Filter by area, size, and price. Draw a polygon on the map to define a custom area.</p>
@@ -209,10 +209,11 @@ const PropertyExplorer = {
     }
 
     // Bind events
-    document.getElementById('filter-apply').addEventListener('click', () => this._applyFilters(focusAreas));
-    document.getElementById('filter-clear').addEventListener('click', () => this._clearFilters(focusAreas));
+    const collapseDisclosure = () => { if (this._filterDisclosure) this._filterDisclosure.collapse(); };
+    document.getElementById('filter-apply').addEventListener('click', () => { this._applyFilters(focusAreas); collapseDisclosure(); });
+    document.getElementById('filter-clear').addEventListener('click', () => { this._clearFilters(focusAreas); collapseDisclosure(); });
     container.querySelectorAll('input').forEach(el => {
-      el.addEventListener('keydown', e => { if (e.key === 'Enter') this._applyFilters(focusAreas); });
+      el.addEventListener('keydown', e => { if (e.key === 'Enter') { this._applyFilters(focusAreas); collapseDisclosure(); } });
     });
 
     this._initMap();
@@ -235,6 +236,10 @@ const PropertyExplorer = {
     });
     this._updateTypeTrigger();
 
+    this._filterDisclosure = MapUtils.initFilterDisclosure({
+      filterBarEl: container.querySelector('.filter-bar'),
+      selectedAreas: this._selectedAreas,
+    });
     this._applyFilters(focusAreas);
   },
 
@@ -322,6 +327,7 @@ const PropertyExplorer = {
       MapUtils.showAreaPolygons(this._map, this._areaPolygonsLayer, namedAreas, focusAreas, homes);
     }
     this._renderResults(homes);
+    if (this._filterDisclosure) this._filterDisclosure.refreshCount();
   },
 
   _renderResults(homes) {

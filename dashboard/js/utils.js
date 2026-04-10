@@ -899,6 +899,56 @@ const MapUtils = {
     if (selectedAreas.has('custom')) enableDraw();
   },
 
+  initFilterDisclosure(opts) {
+    const { filterBarEl, selectedAreas } = opts;
+    if (!filterBarEl) return { refreshCount: () => {}, collapse: () => {} };
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'filter-disclosure-toggle';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.innerHTML = `
+      <span class="filter-disclosure-label">Filters</span>
+      <span class="filter-disclosure-count" hidden>0</span>
+      <span class="filter-disclosure-chevron" aria-hidden="true">&#9662;</span>
+    `;
+    filterBarEl.insertBefore(toggle, filterBarEl.firstChild);
+
+    const mq = window.matchMedia('(max-width: 480px)');
+    const setCollapsed = (collapsed) => {
+      filterBarEl.classList.toggle('filter-bar--collapsed', collapsed);
+      toggle.setAttribute('aria-expanded', String(!collapsed));
+    };
+
+    const refreshCount = () => {
+      let count = 0;
+      filterBarEl.querySelectorAll('input[type="number"]').forEach(i => { if (i.value !== '') count++; });
+      filterBarEl.querySelectorAll('select').forEach(s => { if (s.value !== '') count++; });
+      if (selectedAreas && selectedAreas.size > 0) count++;
+      const badge = toggle.querySelector('.filter-disclosure-count');
+      badge.textContent = `${count} active`;
+      badge.hidden = count === 0;
+    };
+
+    const applyViewport = () => {
+      if (mq.matches) setCollapsed(true);
+      else setCollapsed(false);
+    };
+    applyViewport();
+    if (mq.addEventListener) mq.addEventListener('change', applyViewport);
+    else if (mq.addListener) mq.addListener(applyViewport);
+
+    toggle.addEventListener('click', () => {
+      const collapsed = filterBarEl.classList.contains('filter-bar--collapsed');
+      setCollapsed(!collapsed);
+    });
+
+    return {
+      refreshCount,
+      collapse: () => { if (mq.matches) setCollapsed(true); },
+    };
+  },
+
   updateAreaTrigger(triggerSelector, selectedAreas, focusAreas) {
     const label = document.querySelector(triggerSelector + ' .multiselect-label');
     if (!label) return;
