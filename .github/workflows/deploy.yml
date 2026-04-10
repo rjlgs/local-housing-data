@@ -10,7 +10,7 @@ on:
         required: false
         default: ''
         type: choice
-        options: ['', active, sold, trends, all]
+        options: ['', active, sold, trends, rentals, all]
       skip_visual_quality:
         description: 'Skip visual quality assessment (VQ runs by default)'
         required: false
