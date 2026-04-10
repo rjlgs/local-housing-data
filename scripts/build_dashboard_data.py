@@ -565,7 +565,7 @@ def main():
         with open(vq_cache_path) as f:
             vq_cache = json.load(f)
         vq_assigned = 0
-        for home_list in [homes, active_listings or []]:
+        for home_list in [homes, active_listings or [], rental_listings or []]:
             for home in home_list:
                 vq = vq_cache.get(home.get("address"))
                 if vq:
