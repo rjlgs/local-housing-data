@@ -40,6 +40,7 @@ const Favorites = {
   _rentHeaders: [
     { col: null, label: '', sortable: false },
     { col: 'favorited_at', label: 'Saved' },
+    { col: 'visual_quality', label: 'VQ' },
     { col: 'address', label: 'Address' },
     { col: 'city', label: 'City' },
     { col: 'rent_monthly', label: 'Rent/mo' },
@@ -260,6 +261,7 @@ const Favorites = {
           <tr class="${rowClass}" data-addr="${safeAddr}">
             <td><button class="btn-fav active" data-fav-addr="${safeAddr}" title="Remove from favorites">&#9733;</button></td>
             <td>${Utils.formatDate(item.favorited_at)}</td>
+            <td>${Utils.visualQualityBadge(d)}</td>
             <td class="addr-cell"><a href="${link}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${d.address || '\u2014'}</a></td>
             <td>${d.city || '\u2014'}</td>
             <td>${rentHtml}</td>

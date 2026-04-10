@@ -213,7 +213,7 @@ def get_properties_to_score():
         data = json.load(f)
 
     properties = []
-    for home in data.get("sold_homes", []) + data.get("active_listings", []):
+    for home in data.get("sold_homes", []) + data.get("active_listings", []) + data.get("rental_listings", []):
         photos = home.get("photo_urls", [])
         if photos and home.get("address"):
             properties.append({

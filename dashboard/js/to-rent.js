@@ -33,6 +33,7 @@ const ToRent = {
   _headers: [
     { col: null, label: '', sortable: false },
     { col: 'first_seen', label: 'Listed' },
+    { col: 'visual_quality', label: 'VQ' },
     { col: 'address', label: 'Address' },
     { col: 'city', label: 'City' },
     { col: 'rent_monthly', label: 'Rent/mo' },
@@ -505,6 +506,7 @@ const ToRent = {
           <td><button class="btn-fav${isFav ? ' active' : ''}" data-fav-addr="${(h.address || '').replace(/"/g, '&quot;')}" title="${isFav ? 'Remove from favorites' : 'Add to favorites'}">${isFav ? '&#9733;' : '&#9734;'}</button><button class="btn-downvote${isDown ? ' active' : ''}" data-down-addr="${(h.address || '').replace(/"/g, '&quot;')}" title="${isDown ? 'Remove rule-out' : 'Rule out this rental'}">${isDown ? '&#8634;' : '&#10005;'}</button></td>
           ${MapUtils.PHOTO_BTN_HTML}
           <td>${Utils.formatDate(h.first_seen)} ${badges.join(' ')}</td>
+          <td>${Utils.visualQualityBadge(h)}</td>
           <td class="addr-cell"><a href="${h.listing_url || '#'}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${h.address || '\u2014'}</a></td>
           <td>${h.city || '\u2014'}</td>
           <td>${rentHtml}</td>
