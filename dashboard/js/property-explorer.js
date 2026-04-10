@@ -7,6 +7,12 @@ const PropertyExplorer = {
   _filteredHomes: [],
   _allHomes: [],
   _sort: { col: 'sold_date', asc: false },
+  _selectedTypes: new Set(),
+  _typeOptions: [
+    { value: 'Single Family Residential', label: 'Single Family' },
+    { value: 'Townhouse', label: 'Townhouse' },
+    { value: 'Condo/Co-op', label: 'Condo' },
+  ],
   _map: null,
   _markersLayer: null,
   _drawnItems: null,
@@ -138,12 +144,15 @@ const PropertyExplorer = {
           <div class="filter-cluster-row">
             <div class="filter-group">
               <label>&nbsp;</label>
-              <select id="filter-type">
-                <option value="">Any</option>
-                <option value="Single Family Residential">Single Family</option>
-                <option value="Townhouse">Townhouse</option>
-                <option value="Condo/Co-op">Condo</option>
-              </select>
+              <div id="pe-type-select" class="multiselect">
+                <button type="button" class="multiselect-trigger" id="pe-type-trigger">
+                  <span class="multiselect-label">Any</span>
+                  <span class="multiselect-arrow">&#9662;</span>
+                </button>
+                <div class="multiselect-dropdown" id="pe-type-dropdown">
+                  <div class="multiselect-options" id="pe-type-options"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -187,7 +196,17 @@ const PropertyExplorer = {
     if (saved.hoa) document.getElementById('filter-hoa').value = saved.hoa;
     if (saved.yearMin) document.getElementById('filter-year-min').value = saved.yearMin;
     if (saved.yearMax) document.getElementById('filter-year-max').value = saved.yearMax;
-    if (saved.type) document.getElementById('filter-type').value = saved.type;
+    if (saved.type) {
+      const types = Array.isArray(saved.type) ? saved.type : [saved.type];
+      this._selectedTypes = new Set(types);
+    }
+
+    // Restore saved sort
+    const savedSort = Prefs.get('pe.sort');
+    if (savedSort && savedSort.col) {
+      this._sort.col = savedSort.col;
+      this._sort.asc = savedSort.asc;
+    }
 
     // Bind events
     const collapseDisclosure = () => { if (this._filterDisclosure) this._filterDisclosure.collapse(); };
@@ -208,6 +227,15 @@ const PropertyExplorer = {
       disableDraw: () => { this._disableDraw(); this._customPolygon = null; },
     });
     this._updateAreaTrigger();
+
+    MapUtils.initSimpleMultiSelect({
+      optionsElId: 'pe-type-options', dropdownElId: 'pe-type-dropdown',
+      triggerElId: 'pe-type-trigger', selectElId: 'pe-type-select',
+      items: this._typeOptions, selected: this._selectedTypes,
+      onChanged: () => { this._updateTypeTrigger(); this._applyFilters(focusAreas); },
+    });
+    this._updateTypeTrigger();
+
     this._filterDisclosure = MapUtils.initFilterDisclosure({
       filterBarEl: container.querySelector('.filter-bar'),
       selectedAreas: this._selectedAreas,
@@ -239,6 +267,7 @@ const PropertyExplorer = {
   _enableDraw() { MapUtils.enableDraw(this._map, this._drawControl); },
   _disableDraw() { MapUtils.disableDraw(this._map, this._drawControl, this._drawnItems); },
   _updateAreaTrigger() { MapUtils.updateAreaTrigger('#pe-area-trigger', this._selectedAreas, this._focusAreas); },
+  _updateTypeTrigger() { MapUtils.updateSimpleMultiTrigger('#pe-type-trigger', this._selectedTypes, this._typeOptions, 'Any'); },
 
   _renderMarkers(homes) {
     this._markersByAddr = MapUtils.renderMarkers({
@@ -263,7 +292,7 @@ const PropertyExplorer = {
       hoa: document.getElementById('filter-hoa').value,
       yearMin: document.getElementById('filter-year-min').value,
       yearMax: document.getElementById('filter-year-max').value,
-      type: document.getElementById('filter-type').value,
+      type: [...this._selectedTypes],
     };
   },
 
@@ -271,9 +300,12 @@ const PropertyExplorer = {
     this._selectedAreas = new Set();
     document.querySelectorAll('#pe-area-options input[type="checkbox"]').forEach(cb => cb.checked = false);
     this._updateAreaTrigger();
+    this._selectedTypes = new Set();
+    document.querySelectorAll('#pe-type-options input[type="checkbox"]').forEach(cb => cb.checked = false);
+    this._updateTypeTrigger();
     ['filter-beds-min','filter-beds-max','filter-baths-min','filter-baths-max',
      'filter-sqft-min','filter-sqft-max','filter-price-min','filter-price-max',
-     'filter-hoa','filter-year-min','filter-year-max','filter-type',
+     'filter-hoa','filter-year-min','filter-year-max',
     ].forEach(id => document.getElementById(id).value = '');
     this._customPolygon = null;
     this._disableDraw();
@@ -336,7 +368,7 @@ const PropertyExplorer = {
     `;
 
     MapUtils.bindSortHeaders('#results-table-wrap .sortable', this._sort, ['address', 'sold_date'],
-      () => this._renderResults(this._filteredHomes));
+      () => { Prefs.set('pe.sort', { col: this._sort.col, asc: this._sort.asc }); this._renderResults(this._filteredHomes); });
 
     MapUtils.bindTableMarkerHovers({
       rows: '#results-table-wrap .clickable-row', items: homes,
