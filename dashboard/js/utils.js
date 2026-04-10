@@ -602,7 +602,10 @@ const MapUtils = {
     if (f.hoa === 'has') r = r.filter(h => h.hoa_monthly && h.hoa_monthly > 0);
     if (f.yearMin) r = r.filter(h => h.year_built != null && h.year_built >= Number(f.yearMin));
     if (f.yearMax) r = r.filter(h => h.year_built != null && h.year_built <= Number(f.yearMax));
-    if (f.type) r = r.filter(h => h.property_type === f.type);
+    if (Array.isArray(f.type) ? f.type.length > 0 : f.type) {
+      const types = Array.isArray(f.type) ? f.type : [f.type];
+      r = r.filter(h => types.includes(h.property_type));
+    }
     if (f.aestheticMin) r = r.filter(h => { const s = Utils.aestheticScore100(h); return s != null && s >= Number(f.aestheticMin); });
     if (f.aestheticMax) r = r.filter(h => { const s = Utils.aestheticScore100(h); return s != null && s <= Number(f.aestheticMax); });
     return r;
@@ -959,6 +962,59 @@ const MapUtils = {
       label.textContent = namedAreas[0];
     } else {
       label.textContent = `${namedAreas.length} areas`;
+    }
+  },
+
+  initSimpleMultiSelect(opts) {
+    const { optionsElId, dropdownElId, triggerElId, selectElId, items, selected, onChanged } = opts;
+    const optionsEl = document.getElementById(optionsElId);
+    const dropdown = document.getElementById(dropdownElId);
+    const trigger = document.getElementById(triggerElId);
+
+    items.forEach(item => {
+      const label = document.createElement('label');
+      label.className = 'multiselect-option';
+      label.dataset.key = item.value;
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = item.value;
+      cb.checked = selected.has(item.value);
+      const text = document.createElement('span');
+      text.textContent = item.label;
+      label.append(cb, text);
+      optionsEl.appendChild(label);
+
+      cb.addEventListener('change', () => {
+        if (cb.checked) {
+          selected.add(item.value);
+        } else {
+          selected.delete(item.value);
+        }
+        onChanged();
+      });
+    });
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle('open');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#' + selectElId)) dropdown.classList.remove('open');
+    });
+  },
+
+  updateSimpleMultiTrigger(triggerSelector, selected, items, allLabel) {
+    const label = document.querySelector(triggerSelector + ' .multiselect-label');
+    if (!label) return;
+    if (selected.size === 0 || selected.size === items.length) {
+      label.textContent = allLabel;
+    } else if (selected.size === 1) {
+      const val = [...selected][0];
+      const item = items.find(i => i.value === val);
+      label.textContent = item ? item.label : val;
+    } else {
+      label.textContent = `${selected.size} selected`;
     }
   },
 
