@@ -8,6 +8,8 @@ const Listings = {
   _allListings: [],
   _allSold: [],
   _sort: { col: 'first_seen', asc: false },
+  _selectedTypes: new Set(),
+  _selectedStatuses: new Set(),
   _map: null,
   _markersLayer: null,
   _drawnItems: null,
@@ -22,6 +24,19 @@ const Listings = {
   _compMarkersByAddr: {},
 
   NEW_DAYS: 3,
+
+  _typeOptions: [
+    { value: 'Single Family Residential', label: 'Single Family' },
+    { value: 'Townhouse', label: 'Townhouse' },
+    { value: 'Condo/Co-op', label: 'Condo' },
+  ],
+  _statusOptions: [
+    { value: 'new', label: 'New Only' },
+    { value: 'price-drop', label: 'Price Drops' },
+    { value: 'favorited', label: 'Favorited' },
+    { value: 'hide-downvoted', label: 'Hide Ruled Out' },
+    { value: 'downvoted', label: 'Ruled Out Only' },
+  ],
 
   _headers: [
     { col: null, label: '', sortable: false },
@@ -158,12 +173,15 @@ const Listings = {
           <div class="filter-cluster-row">
             <div class="filter-group">
               <label>&nbsp;</label>
-              <select id="ls-filter-type">
-                <option value="">Any</option>
-                <option value="Single Family Residential">Single Family</option>
-                <option value="Townhouse">Townhouse</option>
-                <option value="Condo/Co-op">Condo</option>
-              </select>
+              <div id="ls-type-select" class="multiselect">
+                <button type="button" class="multiselect-trigger" id="ls-type-trigger">
+                  <span class="multiselect-label">Any</span>
+                  <span class="multiselect-arrow">&#9662;</span>
+                </button>
+                <div class="multiselect-dropdown" id="ls-type-dropdown">
+                  <div class="multiselect-options" id="ls-type-options"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -172,14 +190,15 @@ const Listings = {
           <div class="filter-cluster-row">
             <div class="filter-group">
               <label>&nbsp;</label>
-              <select id="ls-filter-status">
-                <option value="">All</option>
-                <option value="new">New Only</option>
-                <option value="price-drop">Price Drops</option>
-                <option value="favorited">Favorited</option>
-                <option value="hide-downvoted">Hide Ruled Out</option>
-                <option value="downvoted">Ruled Out Only</option>
-              </select>
+              <div id="ls-status-select" class="multiselect">
+                <button type="button" class="multiselect-trigger" id="ls-status-trigger">
+                  <span class="multiselect-label">All</span>
+                  <span class="multiselect-arrow">&#9662;</span>
+                </button>
+                <div class="multiselect-dropdown" id="ls-status-dropdown">
+                  <div class="multiselect-options" id="ls-status-options"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -223,10 +242,23 @@ const Listings = {
     if (saved.hoa) document.getElementById('ls-filter-hoa').value = saved.hoa;
     if (saved.yearMin) document.getElementById('ls-filter-year-min').value = saved.yearMin;
     if (saved.yearMax) document.getElementById('ls-filter-year-max').value = saved.yearMax;
-    if (saved.type) document.getElementById('ls-filter-type').value = saved.type;
-    if (saved.status) document.getElementById('ls-filter-status').value = saved.status;
+    if (saved.type) {
+      const types = Array.isArray(saved.type) ? saved.type : [saved.type];
+      this._selectedTypes = new Set(types);
+    }
+    if (saved.status) {
+      const statuses = Array.isArray(saved.status) ? saved.status : [saved.status];
+      this._selectedStatuses = new Set(statuses);
+    }
     if (saved.aestheticMin) document.getElementById('ls-filter-aesthetic-min').value = saved.aestheticMin;
     if (saved.aestheticMax) document.getElementById('ls-filter-aesthetic-max').value = saved.aestheticMax;
+
+    // Restore saved sort
+    const savedSort = Prefs.get('ls.sort');
+    if (savedSort && savedSort.col) {
+      this._sort.col = savedSort.col;
+      this._sort.asc = savedSort.asc;
+    }
 
     // Bind events
     document.getElementById('ls-filter-apply').addEventListener('click', () => this._applyFilters(focusAreas));
@@ -246,6 +278,23 @@ const Listings = {
       disableDraw: () => { this._disableDraw(); this._customPolygon = null; },
     });
     this._updateAreaTrigger();
+
+    MapUtils.initSimpleMultiSelect({
+      optionsElId: 'ls-type-options', dropdownElId: 'ls-type-dropdown',
+      triggerElId: 'ls-type-trigger', selectElId: 'ls-type-select',
+      items: this._typeOptions, selected: this._selectedTypes,
+      onChanged: () => { this._updateTypeTrigger(); this._applyFilters(focusAreas); },
+    });
+    this._updateTypeTrigger();
+
+    MapUtils.initSimpleMultiSelect({
+      optionsElId: 'ls-status-options', dropdownElId: 'ls-status-dropdown',
+      triggerElId: 'ls-status-trigger', selectElId: 'ls-status-select',
+      items: this._statusOptions, selected: this._selectedStatuses,
+      onChanged: () => { this._updateStatusTrigger(); this._applyFilters(focusAreas); },
+    });
+    this._updateStatusTrigger();
+
     this._applyFilters(focusAreas);
   },
 
@@ -273,6 +322,8 @@ const Listings = {
   _enableDraw() { MapUtils.enableDraw(this._map, this._drawControl); },
   _disableDraw() { MapUtils.disableDraw(this._map, this._drawControl, this._drawnItems); },
   _updateAreaTrigger() { MapUtils.updateAreaTrigger('#ls-area-trigger', this._selectedAreas, this._focusAreas); },
+  _updateTypeTrigger() { MapUtils.updateSimpleMultiTrigger('#ls-type-trigger', this._selectedTypes, this._typeOptions, 'Any'); },
+  _updateStatusTrigger() { MapUtils.updateSimpleMultiTrigger('#ls-status-trigger', this._selectedStatuses, this._statusOptions, 'All'); },
 
   _markerColor(listing) {
     if (listing.price_change && listing.price_change < 0) return '#16a34a';
@@ -310,8 +361,8 @@ const Listings = {
       hoa: document.getElementById('ls-filter-hoa').value,
       yearMin: document.getElementById('ls-filter-year-min').value,
       yearMax: document.getElementById('ls-filter-year-max').value,
-      type: document.getElementById('ls-filter-type').value,
-      status: document.getElementById('ls-filter-status').value,
+      type: [...this._selectedTypes],
+      status: [...this._selectedStatuses],
       aestheticMin: document.getElementById('ls-filter-aesthetic-min').value,
       aestheticMax: document.getElementById('ls-filter-aesthetic-max').value,
     };
@@ -321,9 +372,15 @@ const Listings = {
     this._selectedAreas = new Set();
     document.querySelectorAll('#ls-area-options input[type="checkbox"]').forEach(cb => cb.checked = false);
     this._updateAreaTrigger();
+    this._selectedTypes = new Set();
+    document.querySelectorAll('#ls-type-options input[type="checkbox"]').forEach(cb => cb.checked = false);
+    this._updateTypeTrigger();
+    this._selectedStatuses = new Set();
+    document.querySelectorAll('#ls-status-options input[type="checkbox"]').forEach(cb => cb.checked = false);
+    this._updateStatusTrigger();
     ['ls-filter-beds-min','ls-filter-beds-max','ls-filter-baths-min','ls-filter-baths-max',
      'ls-filter-sqft-min','ls-filter-sqft-max','ls-filter-price-min','ls-filter-price-max',
-     'ls-filter-hoa','ls-filter-year-min','ls-filter-year-max','ls-filter-type','ls-filter-status',
+     'ls-filter-hoa','ls-filter-year-min','ls-filter-year-max',
      'ls-filter-aesthetic-min','ls-filter-aesthetic-max',
     ].forEach(id => document.getElementById(id).value = '');
     this._customPolygon = null;
@@ -338,12 +395,26 @@ const Listings = {
     let listings = MapUtils.applyAreaFilter([...this._allListings], f.areas, this._customPolygon, focusAreas);
     listings = MapUtils.applyCommonFilters(listings, f, 'list_price');
 
-    // Listings-specific status filters
-    if (f.status === 'new') listings = listings.filter(h => this._isNew(h));
-    if (f.status === 'price-drop') listings = listings.filter(h => h.price_change && h.price_change < 0);
-    if (f.status === 'favorited') listings = listings.filter(h => FavoritesStore.isFavorited(h.address));
-    if (f.status === 'hide-downvoted') listings = listings.filter(h => !DownvoteStore.isDownvoted(h.address));
-    if (f.status === 'downvoted') listings = listings.filter(h => DownvoteStore.isDownvoted(h.address));
+    // Listings-specific status filters (multiselect — array of selected values)
+    const statuses = Array.isArray(f.status) ? f.status : (f.status ? [f.status] : []);
+    if (statuses.length > 0) {
+      const positiveStatuses = statuses.filter(s => s !== 'hide-downvoted');
+      const hideDownvoted = statuses.includes('hide-downvoted');
+
+      if (positiveStatuses.length > 0) {
+        listings = listings.filter(h => positiveStatuses.some(s => {
+          if (s === 'new') return this._isNew(h);
+          if (s === 'price-drop') return h.price_change && h.price_change < 0;
+          if (s === 'favorited') return FavoritesStore.isFavorited(h.address);
+          if (s === 'downvoted') return DownvoteStore.isDownvoted(h.address);
+          return false;
+        }));
+      }
+
+      if (hideDownvoted) {
+        listings = listings.filter(h => !DownvoteStore.isDownvoted(h.address));
+      }
+    }
 
     this._filteredListings = listings;
     this._renderMarkers(listings);
@@ -417,7 +488,7 @@ const Listings = {
     `;
 
     MapUtils.bindSortHeaders('#ls-results-table-wrap .sortable', this._sort, ['address', 'first_seen'],
-      () => this._renderResults(this._filteredListings));
+      () => { Prefs.set('ls.sort', { col: this._sort.col, asc: this._sort.asc }); this._renderResults(this._filteredListings); });
 
     // Star (favorite) button handlers
     document.querySelectorAll('#ls-results-table-wrap .btn-fav').forEach(btn => {
