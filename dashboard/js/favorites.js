@@ -105,6 +105,13 @@ const Favorites = {
     document.getElementById('fav-detail-close').addEventListener('click', () => this._hideDetail());
     document.getElementById('fav-detail-backdrop').addEventListener('click', () => this._hideDetail());
 
+    // Restore saved sort
+    const savedSort = Prefs.get('fav.sort');
+    if (savedSort && savedSort.col) {
+      this._sort.col = savedSort.col;
+      this._sort.asc = savedSort.asc;
+    }
+
     this._initMap();
     this._photoTooltip = MapUtils.createPhotoTooltip();
     this._renderAll();
@@ -302,7 +309,7 @@ const Favorites = {
 
     // Sort headers
     MapUtils.bindSortHeaders('#fav-results-table-wrap .sortable', this._sort, ['address', 'favorited_at'],
-      () => this._renderResults(this._items));
+      () => { Prefs.set('fav.sort', { col: this._sort.col, asc: this._sort.asc }); this._renderResults(this._items); });
 
     // Star (unfavorite) buttons — remove from whichever category is active.
     document.querySelectorAll('#fav-results-table-wrap .btn-fav').forEach(btn => {

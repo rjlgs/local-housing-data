@@ -26,7 +26,7 @@ const MarketPulse = {
       <div class="tab-header">
         <div class="tab-title-row">
           <h2>Market Pulse</h2>
-          <button id="mp-learn-more" class="btn-learn-more">Learn More</button>
+          <button id="mp-learn-more" class="btn-learn-more" aria-label="Learn more about market pulse" title="Learn more">&#9432;</button>
           ${data.data_freshness && data.data_freshness.market_trends ? `<span class="freshness-badge">Trend data updated ${MapUtils.formatAge(data.data_freshness.market_trends)}</span>` : ''}
         </div>
         <p class="subtitle">Is now a good time to buy? Track key market indicators over time.</p>

@@ -602,7 +602,10 @@ const MapUtils = {
     if (f.hoa === 'has') r = r.filter(h => h.hoa_monthly && h.hoa_monthly > 0);
     if (f.yearMin) r = r.filter(h => h.year_built != null && h.year_built >= Number(f.yearMin));
     if (f.yearMax) r = r.filter(h => h.year_built != null && h.year_built <= Number(f.yearMax));
-    if (f.type) r = r.filter(h => h.property_type === f.type);
+    if (Array.isArray(f.type) ? f.type.length > 0 : f.type) {
+      const types = Array.isArray(f.type) ? f.type : [f.type];
+      r = r.filter(h => types.includes(h.property_type));
+    }
     if (f.aestheticMin) r = r.filter(h => { const s = Utils.aestheticScore100(h); return s != null && s >= Number(f.aestheticMin); });
     if (f.aestheticMax) r = r.filter(h => { const s = Utils.aestheticScore100(h); return s != null && s <= Number(f.aestheticMax); });
     return r;
@@ -896,6 +899,56 @@ const MapUtils = {
     if (selectedAreas.has('custom')) enableDraw();
   },
 
+  initFilterDisclosure(opts) {
+    const { filterBarEl, selectedAreas } = opts;
+    if (!filterBarEl) return { refreshCount: () => {}, collapse: () => {} };
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'filter-disclosure-toggle';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.innerHTML = `
+      <span class="filter-disclosure-label">Filters</span>
+      <span class="filter-disclosure-count" hidden>0</span>
+      <span class="filter-disclosure-chevron" aria-hidden="true">&#9662;</span>
+    `;
+    filterBarEl.insertBefore(toggle, filterBarEl.firstChild);
+
+    const mq = window.matchMedia('(max-width: 480px)');
+    const setCollapsed = (collapsed) => {
+      filterBarEl.classList.toggle('filter-bar--collapsed', collapsed);
+      toggle.setAttribute('aria-expanded', String(!collapsed));
+    };
+
+    const refreshCount = () => {
+      let count = 0;
+      filterBarEl.querySelectorAll('input[type="number"]').forEach(i => { if (i.value !== '') count++; });
+      filterBarEl.querySelectorAll('select').forEach(s => { if (s.value !== '') count++; });
+      if (selectedAreas && selectedAreas.size > 0) count++;
+      const badge = toggle.querySelector('.filter-disclosure-count');
+      badge.textContent = `${count} active`;
+      badge.hidden = count === 0;
+    };
+
+    const applyViewport = () => {
+      if (mq.matches) setCollapsed(true);
+      else setCollapsed(false);
+    };
+    applyViewport();
+    if (mq.addEventListener) mq.addEventListener('change', applyViewport);
+    else if (mq.addListener) mq.addListener(applyViewport);
+
+    toggle.addEventListener('click', () => {
+      const collapsed = filterBarEl.classList.contains('filter-bar--collapsed');
+      setCollapsed(!collapsed);
+    });
+
+    return {
+      refreshCount,
+      collapse: () => { if (mq.matches) setCollapsed(true); },
+    };
+  },
+
   updateAreaTrigger(triggerSelector, selectedAreas, focusAreas) {
     const label = document.querySelector(triggerSelector + ' .multiselect-label');
     if (!label) return;
@@ -909,6 +962,59 @@ const MapUtils = {
       label.textContent = namedAreas[0];
     } else {
       label.textContent = `${namedAreas.length} areas`;
+    }
+  },
+
+  initSimpleMultiSelect(opts) {
+    const { optionsElId, dropdownElId, triggerElId, selectElId, items, selected, onChanged } = opts;
+    const optionsEl = document.getElementById(optionsElId);
+    const dropdown = document.getElementById(dropdownElId);
+    const trigger = document.getElementById(triggerElId);
+
+    items.forEach(item => {
+      const label = document.createElement('label');
+      label.className = 'multiselect-option';
+      label.dataset.key = item.value;
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = item.value;
+      cb.checked = selected.has(item.value);
+      const text = document.createElement('span');
+      text.textContent = item.label;
+      label.append(cb, text);
+      optionsEl.appendChild(label);
+
+      cb.addEventListener('change', () => {
+        if (cb.checked) {
+          selected.add(item.value);
+        } else {
+          selected.delete(item.value);
+        }
+        onChanged();
+      });
+    });
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle('open');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#' + selectElId)) dropdown.classList.remove('open');
+    });
+  },
+
+  updateSimpleMultiTrigger(triggerSelector, selected, items, allLabel) {
+    const label = document.querySelector(triggerSelector + ' .multiselect-label');
+    if (!label) return;
+    if (selected.size === 0 || selected.size === items.length) {
+      label.textContent = allLabel;
+    } else if (selected.size === 1) {
+      const val = [...selected][0];
+      const item = items.find(i => i.value === val);
+      label.textContent = item ? item.label : val;
+    } else {
+      label.textContent = `${selected.size} selected`;
     }
   },
 
