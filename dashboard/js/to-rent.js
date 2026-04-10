@@ -185,11 +185,17 @@ const ToRent = {
         <div class="filter-cluster">
           <div class="filter-cluster-label">Source</div>
           <div class="filter-cluster-row">
-            <div class="filter-group source-filter-group" id="tr-source-filter">
-              ${sourceOptions.map(s => {
-                const label = this.SOURCE_LABELS[s]?.label || s;
-                return `<label class="source-filter-opt"><input type="checkbox" data-source="${s}"> ${label}</label>`;
-              }).join('')}
+            <div class="filter-group">
+              <label>&nbsp;</label>
+              <div id="tr-source-select" class="multiselect">
+                <button type="button" class="multiselect-trigger" id="tr-source-trigger">
+                  <span class="multiselect-label">All Sources</span>
+                  <span class="multiselect-arrow">&#9662;</span>
+                </button>
+                <div class="multiselect-dropdown" id="tr-source-dropdown">
+                  <div class="multiselect-options" id="tr-source-options"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -240,10 +246,7 @@ const ToRent = {
     if (saved.furnished) document.getElementById('tr-filter-furnished').value = saved.furnished;
     if (saved.type) document.getElementById('tr-filter-type').value = saved.type;
     if (saved.status) document.getElementById('tr-filter-status').value = saved.status;
-    // Restore source checkboxes
-    document.querySelectorAll('#tr-source-filter input[type="checkbox"]').forEach(cb => {
-      if (this._selectedSources.has(cb.dataset.source)) cb.checked = true;
-    });
+    // Source checkboxes are restored when the source multiselect is initialized below.
 
     // Bind events
     document.getElementById('tr-filter-apply').addEventListener('click', () => this._applyFilters(focusAreas));
@@ -251,14 +254,6 @@ const ToRent = {
     container.querySelectorAll('input, select').forEach(el => {
       el.addEventListener('keydown', e => { if (e.key === 'Enter') this._applyFilters(focusAreas); });
     });
-    document.querySelectorAll('#tr-source-filter input[type="checkbox"]').forEach(cb => {
-      cb.addEventListener('change', () => {
-        const src = cb.dataset.source;
-        if (cb.checked) this._selectedSources.add(src); else this._selectedSources.delete(src);
-        this._applyFilters(focusAreas);
-      });
-    });
-
     this._initMap();
     this._photoTooltip = MapUtils.createPhotoTooltip();
     MapUtils.initAreaMultiSelect({
@@ -270,6 +265,7 @@ const ToRent = {
       disableDraw: () => { this._disableDraw(); this._customPolygon = null; },
     });
     this._updateAreaTrigger();
+    this._initSourceMultiSelect(sourceOptions, focusAreas);
     this._applyFilters(focusAreas);
   },
 
@@ -297,6 +293,58 @@ const ToRent = {
   _enableDraw() { MapUtils.enableDraw(this._map, this._drawControl); },
   _disableDraw() { MapUtils.disableDraw(this._map, this._drawControl, this._drawnItems); },
   _updateAreaTrigger() { MapUtils.updateAreaTrigger('#tr-area-trigger', this._selectedAreas, this._focusAreas); },
+
+  _initSourceMultiSelect(sourceOptions, focusAreas) {
+    const options = document.getElementById('tr-source-options');
+    const dropdown = document.getElementById('tr-source-dropdown');
+    const trigger = document.getElementById('tr-source-trigger');
+
+    sourceOptions.forEach(s => {
+      const label = document.createElement('label');
+      label.className = 'multiselect-option';
+      label.dataset.key = s;
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = s;
+      cb.checked = this._selectedSources.has(s);
+      const text = document.createElement('span');
+      text.textContent = this.SOURCE_LABELS[s]?.label || s;
+      label.append(cb, text);
+      options.appendChild(label);
+
+      cb.addEventListener('change', () => {
+        if (cb.checked) this._selectedSources.add(s);
+        else this._selectedSources.delete(s);
+        this._updateSourceTrigger();
+        this._applyFilters(focusAreas);
+      });
+    });
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle('open');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#tr-source-select')) dropdown.classList.remove('open');
+    });
+
+    this._updateSourceTrigger();
+  },
+
+  _updateSourceTrigger() {
+    const label = document.querySelector('#tr-source-trigger .multiselect-label');
+    if (!label) return;
+    const count = this._selectedSources.size;
+    if (count === 0) {
+      label.textContent = 'All Sources';
+    } else if (count === 1) {
+      const src = [...this._selectedSources][0];
+      label.textContent = this.SOURCE_LABELS[src]?.label || src;
+    } else {
+      label.textContent = `${count} sources`;
+    }
+  },
 
   _markerColor(rental) {
     if (this._isNew(rental)) return '#ea580c';
@@ -342,8 +390,9 @@ const ToRent = {
     this._selectedAreas = new Set();
     this._selectedSources = new Set();
     document.querySelectorAll('#tr-area-options input[type="checkbox"]').forEach(cb => cb.checked = false);
-    document.querySelectorAll('#tr-source-filter input[type="checkbox"]').forEach(cb => cb.checked = false);
+    document.querySelectorAll('#tr-source-options input[type="checkbox"]').forEach(cb => cb.checked = false);
     this._updateAreaTrigger();
+    this._updateSourceTrigger();
     ['tr-filter-beds-min','tr-filter-beds-max','tr-filter-baths-min','tr-filter-baths-max',
      'tr-filter-sqft-min','tr-filter-sqft-max','tr-filter-price-min','tr-filter-price-max',
      'tr-filter-pets','tr-filter-furnished','tr-filter-type','tr-filter-status',
